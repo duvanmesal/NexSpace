@@ -1,6 +1,6 @@
 # Propuesta técnica · Fase 1 — NexContainers sobre FLOATING
 
-**Estado:** propuesta para revisión; no autoriza ni inicia implementación.  
+**Estado:** propuesta para revisión; no autoriza ni inicia implementación.
 **Base:** decisiones de producto aprobadas, arquitectura modular actual y validación funcional básica de FLOATING en Fase 0.
 
 ## Objetivo y límites
