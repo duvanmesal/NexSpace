@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "NexSpace.UI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "NexSpace.UI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

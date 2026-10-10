@@ -1,0 +1,56 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Aa]rtifacts/
+[Tt]est[Rr]esults/
+*.user
+*.suo
+*.cache
+*.log
+*.tmp
+*.temp
+
+# Visual Studio and IDE state
+.vs/
+.idea/
+.vscode/
+*.userosscache
+*.sln.docstates
+
+# .NET local tooling
+.dotnet/
+packages/
+project.lock.json
+project.fragment.lock.json
+
+# Signing material and local configuration
+*.pfx
+*.p12
+*.snk
+*.cer
+*.publishsettings
+secrets.json
+appsettings.*.json
+.env
+.env.*
+!.env.example
+
+# Local databases and application data
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+*.bak
+
+# Private desktop captures and local evidence
+assets/references/original/
+docs/testing/evidence/private/
+*.screenrecording
+
+# Windows noise
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
