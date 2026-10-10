@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Navigation;
 using Microsoft.UI.Xaml.Shapes;
+using NexSpace.Infrastructure;
 
 // To learn more about WinUI, the WinUI project structure,
 // and more about our project templates, see: http://aka.ms/winui-project-info.
@@ -19,9 +20,10 @@ namespace NexSpace.UI;
 /// <summary>
 /// Provides application-specific behavior to supplement the default Application class.
 /// </summary>
-public partial class App : Application
+public partial class App : Microsoft.UI.Xaml.Application
 {
     private Window? _window;
+    public static MainWindow? MainWindow { get; private set; }
 
     /// <summary>
     /// Initializes the singleton application object.  This is the first line of authored code
@@ -30,6 +32,8 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        UnhandledException += (_, args) => new JsonEventLog().Write(
+            "unhandled-exception", args.Exception.GetType().Name, args.Exception.HResult.ToString("X8"));
     }
 
     /// <summary>
@@ -38,7 +42,16 @@ public partial class App : Application
     /// <param name="args">Details about the launch request and process.</param>
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
-        _window = new MainWindow();
+        MainWindow = new MainWindow();
+        _window = MainWindow;
+        _window.Closed += (_, _) =>
+        {
+            MainWindow?.Shutdown();
+            new JsonEventLog().Write("application-closed", "Main window closed");
+        };
         _window.Activate();
+        MainWindow.RegisterEmergencyHotkey();
+        if (Environment.GetCommandLineArgs().Any(argument => string.Equals(argument, "--recovery-probe", StringComparison.OrdinalIgnoreCase)))
+            Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().TryEnqueue(MainWindow.StartControlledRecoveryProbe);
     }
 }
