@@ -1,290 +1,209 @@
-using System.Diagnostics;
-using System.Runtime.InteropServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using NexSpace.Application;
+using NexSpace.Domain;
 using NexSpace.Infrastructure;
 using NexSpace.Windows;
-using Microsoft.UI.Dispatching;
 
 namespace NexSpace.UI;
 
 public sealed partial class MainPage : Page
 {
-    private readonly IDisplayService _displays = new WindowsDisplayService();
-    private readonly IDesktopIntegrationService _desktop = new DesktopIntegrationService();
-    private readonly IDesktopIconService _icons = new UnavailableDesktopIconService();
-    private readonly IWindowHost _windows;
+    private readonly IContainerRepository _repository;
+    private readonly ContainerService _service;
+    private readonly IContainerItemPlatformService _platform = new WindowsContainerItemPlatformService();
+    private readonly Dictionary<Guid, ContainerWindow> _windows = [];
     private readonly IEventLog _log = new JsonEventLog();
-    private WindowHandle? _panel;
-    private bool _desktopMode;
-    private DispatcherQueueTimer? _shellWatch;
-    private string _explorerSnapshot = string.Empty;
-    private bool _controlledProbeStarted;
+    private int _listRevision;
+    private bool _shuttingDown;
 
     public MainPage()
     {
+        _log.Write("phase1-console-xaml-init-start", "Initializing NexContainers console");
         InitializeComponent();
-        _windows = new WinUiWindowHost(_desktop);
-        _windows.WindowClosed += Panel_Closed;
-        _windows.RecoveryTransitioned += RecoveryTransitioned;
+        _log.Write("phase1-console-xaml-init-complete", "NexContainers console XAML initialized");
+        var dataDir = Environment.GetEnvironmentVariable("NEXSPACE_DATA_DIR");
+        if (string.IsNullOrWhiteSpace(dataDir)) dataDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NexSpace", "data");
+        _repository = new SqliteContainerRepository(Path.Combine(dataDir, "nexspace.db"));
+        _service = new ContainerService(_repository);
         Loaded += (_, _) =>
         {
-            RefreshRecoveryStatus();
-            RefreshEnvironment();
-            _explorerSnapshot = GetExplorerSnapshot();
-            _shellWatch = DispatcherQueue.GetForCurrentThread().CreateTimer();
-            _shellWatch.Interval = TimeSpan.FromSeconds(2);
-            _shellWatch.Tick += (_, _) => CheckExplorerState();
-            _shellWatch.Start();
+            _log.Write("phase1-console-loaded", "Loading local container library");
+            _ = RefreshContainersAsync();
         };
-        _log.Write("startup", "Phase 0 prototype started");
-    }
-
-    private static string GetExplorerSnapshot() => string.Join(',', Process.GetProcessesByName("explorer").Select(process =>
-    {
-        using (process) return process.Id;
-    }).Order());
-
-    private void CheckExplorerState()
-    {
-        var current = GetExplorerSnapshot();
-        if (current == _explorerSnapshot) return;
-        _explorerSnapshot = current;
-        _log.Write("explorer-process-change", "Explorer process set changed; no restart or termination requested");
-        if (!_desktopMode || _panel is null) return;
-        try
-        {
-            var result = _windows.SetMode(_panel, DisplayMode.Floating);
-            if (!result.Succeeded)
-            {
-                IntegrationText.Text = "Explorer cambió · requiere restauración manual";
-                _log.Write("desktop-fallback-failed", "Automatic fallback was rejected", result.Code);
-                return;
-            }
-            _desktopMode = false;
-            ModeText.Text = "FLOATING";
-            IntegrationText.Text = "Explorer cambió · fallback flotante";
-            DesktopButton.Content = "Probar modo Desktop…";
-            _log.Write("desktop-fallback", "Returned panel to floating mode after Explorer process change");
-        }
-        catch (Exception ex) { _log.Write("desktop-fallback-failed", "Automatic fallback failed", ex.GetType().Name); }
     }
 
     public void Shutdown()
     {
-        _shellWatch?.Stop();
-        ClosePanelSafely();
+        _shuttingDown = true;
+        foreach (var window in _windows.Values.ToArray())
+        {
+            try { window.Close(); } catch { /* Continue closing remaining floating windows. */ }
+        }
+        _windows.Clear();
+        Visuals.ShellIconLoader.ClearCache();
     }
 
-    public void RefreshRecoveryStatus()
-    {
-        if (RecoveryText is null) return;
-        var main = App.MainWindow;
-        RecoveryText.Text = main?.EmergencyHotkeyRegistered == true
-            ? main.EmergencyHotkeyStatus + " · watchdog de 15 s en cada experimento"
-            : (main?.EmergencyHotkeyStatus ?? "Atajo global no disponible") + " · DESKTOP deshabilitado por seguridad";
-        DesktopButton.IsEnabled = main?.EmergencyHotkeyRegistered == true;
-    }
+    public void RefreshRecoveryStatus() { }
+
+    public void StartControlledRecoveryProbe() =>
+        _log.Write("phase1-recovery-probe-not-run", "Desktop z-order experiment is out of scope for Phase 1.");
 
     public void EmergencyRestore(string reason)
     {
-        try
+        var failures = 0;
+        foreach (var pair in _windows.ToArray())
         {
-            var result = _windows.RestoreAllFloating(reason);
-            _desktopMode = false;
-            ModeText.Text = "FLOATING";
-            IntegrationText.Text = result.Succeeded ? "Recuperación completada" : "Recuperación incompleta · revisar log";
-            DesktopButton.Content = "Probar modo Desktop…";
-            _log.Write("emergency-restore", reason, result.Succeeded ? null : result.Message);
-        }
-        catch (Exception ex)
-        {
-            _log.Write("emergency-restore-failed", reason, ex.GetType().Name);
-            IntegrationText.Text = "Recuperación fallida · revisar log";
-        }
-    }
-
-    public void StartControlledRecoveryProbe()
-    {
-        if (_controlledProbeStarted) return;
-        _controlledProbeStarted = true;
-        if (App.MainWindow?.EmergencyHotkeyRegistered != true)
-        {
-            _log.Write("controlled-desktop-probe-blocked", "Emergency hotkey not registered");
-            return;
-        }
-        try
-        {
-            _panel = _windows.Create(new WindowDescriptor("NexSpace · recuperación controlada", 470, 330, DisplayMode.Floating));
-            _log.Write("controlled-desktop-probe-start", "Own demo window only; emergency hotkey registered; host arms 15 second watchdog before HWND_BOTTOM");
-            var result = _windows.SetMode(_panel, DisplayMode.Desktop);
-            if (!result.Succeeded) _log.Write("controlled-desktop-probe-failed", result.Code, result.Message);
-        }
-        catch (Exception ex) { _log.Write("controlled-desktop-probe-failed", "Probe setup or attach threw", ex.GetType().Name); }
-    }
-
-    private void EmergencyRestore_Click(object sender, RoutedEventArgs e) => EmergencyRestore("dashboard-button");
-
-    private void RecoveryTransitioned(WindowHandle handle, DisplayMode mode, OperationResult result, string reason)
-    {
-        if (reason == "watchdog" && mode == DisplayMode.Floating && result.Succeeded)
-            _log.Write("controlled-desktop-probe-pass", "Watchdog restored the NexSpace demo window to FLOATING");
-        DispatcherQueue.TryEnqueue(() =>
-        {
-            if (_panel?.Id != handle.Id) return;
-            _desktopMode = mode == DisplayMode.Desktop;
-            ModeText.Text = _desktopMode ? "DESKTOP · EXPERIMENTAL" : "FLOATING";
-            IntegrationText.Text = result.Succeeded ? (reason == "watchdog" ? "Restaurado automáticamente" : "Listo · ventana independiente") : "Error · recuperación reintentará";
-            DesktopButton.Content = _desktopMode ? "Restaurar FLOATING…" : "Probar modo Desktop…";
-        });
-    }
-
-    private void ClosePanelSafely()
-    {
-        var handle = _panel;
-        if (handle is null) return;
-        try
-        {
-            var result = _windows.Close(handle);
-            if (!result.Succeeded) _log.Write("desktop-detach-on-close-failed", "Panel was closed after a detach failure", result.Code);
-        }
-        catch (Exception ex) { _log.Write("panel-close-failed", "Panel cleanup failed", ex.GetType().Name); }
-        finally { _panel = null; _desktopMode = false; }
-    }
-
-    private void RefreshEnvironment()
-    {
-        try
-        {
-            var monitors = _displays.GetDisplays();
-            var primary = monitors.FirstOrDefault(x => x.IsPrimary) ?? monitors.FirstOrDefault();
-            DisplayText.Text = primary is null ? "No se detectaron monitores." :
-                $"{monitors.Count} monitor(es) · {primary.Width} × {primary.Height} · escala {primary.Dpi}%";
-        }
-        catch (Exception ex)
-        {
-            DisplayText.Text = "No fue posible consultar monitores.";
-            _log.Write("display-probe-failed", "Display enumeration failed", ex.GetType().Name);
-        }
-    }
-
-    private void Panel_Click(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            if (_panel is null)
+            try
             {
-                _panel = _windows.Create(new WindowDescriptor("NexSpace · Panel de prueba", 470, 330, DisplayMode.Floating));
-                PanelButton.Content = "Mostrar panel";
-                _log.Write("panel-created", "Floating demo panel created");
+                var safe = KeepOnScreen(pair.Value, _service.Get(pair.Key)?.Placement ?? ContainerRules.DefaultPlacement);
+                pair.Value.RestoreToVisibleArea(safe);
             }
-            else _windows.Activate(_panel);
+            catch (Exception ex) { failures++; _log.Write("floating-emergency-restore-error", pair.Key.ToString("D"), ex.GetType().Name); }
+        }
+        StatusText.Text = failures == 0 ? "FLOATING restaurado · ventanas verificadas" : $"Recuperación parcial · {failures} ventana(s) requieren revisión";
+        _log.Write("floating-emergency-restore", reason, failures == 0 ? null : $"failures={failures}");
+    }
+
+    private ContainerPlacement KeepOnScreen(ContainerWindow window, ContainerPlacement placement)
+    {
+        var display = new WindowsDisplayService().GetDisplays().FirstOrDefault(x => x.IsPrimary) ?? new WindowsDisplayService().GetDisplays().FirstOrDefault();
+        if (display is null) return placement;
+        var safe = PlacementPolicy.KeepFullyVisible(new WindowPlacement(placement.MonitorKey, placement.X, placement.Y, placement.Width, placement.Height), display);
+        return new(safe.MonitorKey, safe.X, safe.Y, safe.Width, safe.Height);
+    }
+
+    private async Task RefreshContainersAsync()
+    {
+        if (_shuttingDown) return;
+        var revision = ++_listRevision;
+        IReadOnlyList<NexContainer> containers;
+        try
+        {
+            _log.Write("container-list-query-start", "Loading container records from SQLite");
+            containers = await Task.Run(_service.GetAll);
+            _log.Write("container-list-query-complete", $"Loaded {containers.Count} containers");
         }
         catch (Exception ex)
         {
-            _log.Write("panel-create-failed", "Window creation failed", ex.GetType().Name);
-            _ = ShowMessageAsync("No se pudo abrir el panel. NexSpace permanece en modo seguro.");
+            EmptyState.Visibility = Visibility.Visible;
+            StatusText.Text = "No se pudo leer la biblioteca local. No se modificaron recursos.";
+            _log.Write("container-list-load-failed", "Could not load container library", ex.GetType().Name);
+            return;
         }
+        if (_shuttingDown || revision != _listRevision) return;
+        ContainersList.Items.Clear();
+        foreach (var container in containers)
+        {
+            var row = new Grid { ColumnDefinitions = { new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }, new ColumnDefinition { Width = GridLength.Auto } }, Padding = new Thickness(16, 13, 16, 13), ColumnSpacing = 16 };
+            var text = new StackPanel { Spacing = 5 };
+            text.Children.Add(new TextBlock { Text = container.Name, Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["NexTitleStyle"] });
+            text.Children.Add(new TextBlock { Text = $"{container.Items.Count} referencia(s) · {container.ViewMode} · {(container.IsPositionLocked ? "posición bloqueada" : "FLOATING")}", FontSize = 12, Foreground = (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["NexSecondaryTextBrush"] });
+            row.Children.Add(text);
+            var openLabel = new TextBlock { Text = "Abrir  ↗", VerticalAlignment = VerticalAlignment.Center, Foreground = (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["NexSeaBrush"] };
+            row.Children.Add(openLabel);
+            Grid.SetColumn(openLabel, 1);
+            var border = new Border { Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["NexLibrarySurfaceStyle"], Child = row };
+            border.Tag = container.Id;
+            ContainersList.Items.Add(new ListViewItem { Content = border, Tag = container.Id, Padding = new Thickness(0), MinHeight = 70 });
+        }
+        EmptyState.Visibility = containers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        StatusText.Text = $"{containers.Count} contenedor(es) · FLOATING · datos locales";
     }
 
-    private async void Desktop_Click(object sender, RoutedEventArgs e)
+    private async void Create_Click(object sender, RoutedEventArgs e)
     {
-        if (App.MainWindow?.EmergencyHotkeyRegistered != true)
-        {
-            await ShowMessageAsync("El atajo global de emergencia no está activo. El modo experimental permanece deshabilitado.");
-            return;
-        }
-        if (_panel is null)
-        {
-            await ShowMessageAsync("Abre primero el panel de demostración para elegir qué ventana probar.");
-            return;
-        }
-        var warning = _desktopMode
-            ? "La prueba devolverá el panel a la parte superior del orden Z."
-            : "Esta prueba solo baja el panel en el orden Z; puede quedar oculto detrás de ventanas o del escritorio. No modifica Explorer ni iconos. Puedes volver aquí y restaurarlo. ¿Continuar?";
-        var dialog = new ContentDialog
-        {
-            XamlRoot = XamlRoot, Title = _desktopMode ? "Restaurar modo flotante" : "Experimento Desktop (no validado)",
-            Content = warning, PrimaryButtonText = _desktopMode ? "Restaurar" : "Continuar", CloseButtonText = "Cancelar",
-            DefaultButton = ContentDialogButton.Close
-        };
+        var box = new TextBox { PlaceholderText = "Por ejemplo: Trabajo", MaxLength = ContainerRules.MaximumNameLength };
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Nuevo contenedor", Content = box, PrimaryButtonText = "Crear", CloseButtonText = "Cancelar" };
         if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
-
-        OperationResult result;
-        try { result = _windows.SetMode(_panel, _desktopMode ? DisplayMode.Floating : DisplayMode.Desktop); }
-        catch (Exception ex)
-        {
-            _log.Write("mode-change-failed", "Desktop mode change raised an exception", ex.GetType().Name);
-            await ShowMessageAsync("No se aplicó el cambio. FLOATING sigue disponible.");
-            return;
-        }
-        if (result.Succeeded)
-        {
-            _desktopMode = !_desktopMode;
-            ModeText.Text = _desktopMode ? "DESKTOP · EXPERIMENTAL" : "FLOATING";
-            IntegrationText.Text = _desktopMode ? "Orden Z bajo · no certificado" : "Listo · ventana independiente";
-            DesktopButton.Content = _desktopMode ? "Restaurar FLOATING…" : "Probar modo Desktop…";
-        }
-        else await ShowMessageAsync($"No se confirmó el cambio ({result.Code}). Si la recuperación sigue pendiente, el watchdog continuará activo.");
-        _log.Write("mode-change", result.Code, result.Succeeded ? null : result.Code);
+        var result = _service.Create(box.Text);
+        if (!result.Succeeded) { await ShowMessageAsync(result.Message); return; }
+        _log.Write("container-created", result.Value!.Id.ToString("D"));
+        await RefreshContainersAsync();
+        OpenContainer(result.Value.Id);
     }
 
-    private void Restore_Click(object sender, RoutedEventArgs e)
+    private void Container_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is ListViewItem { Tag: Guid id }) OpenContainer(id);
+        else if (e.ClickedItem is FrameworkElement { Tag: Guid contentId }) OpenContainer(contentId);
+    }
+
+    private void OpenContainer(Guid id)
     {
         try
         {
-            var primary = _displays.GetDisplays().FirstOrDefault(x => x.IsPrimary) ?? _displays.GetDisplays().FirstOrDefault();
-            if (primary is null) return;
-            var safe = PlacementPolicy.KeepVisible(new WindowPlacement(primary.Key, primary.WorkX + 36, primary.WorkY + 50, 470, 330), primary);
-            if (_panel is null) Panel_Click(sender, e);
-            if (_panel is not null) _windows.SetPlacement(_panel, safe);
-            if (_desktopMode && _panel is not null)
-            {
-                _windows.SetMode(_panel, DisplayMode.Floating);
-                _desktopMode = false;
-                ModeText.Text = "FLOATING";
-                IntegrationText.Text = "Posición segura restaurada";
-                DesktopButton.Content = "Probar modo Desktop…";
-            }
-            if (_panel is not null) _windows.Activate(_panel);
-            _log.Write("safe-placement-restored", primary.Key);
+            if (_windows.TryGetValue(id, out var existing)) { existing.Activate(); return; }
+            var container = _service.Get(id);
+            if (container is null) { _ = RefreshContainersAsync(); return; }
+            var window = new ContainerWindow(id, _service, _platform);
+            _windows[id] = window;
+            window.ContainerChanged += () => _ = RefreshContainersAsync();
+            window.Closed += (_, _) => { _windows.Remove(id); _ = RefreshContainersAsync(); };
+            window.Activate();
+            _log.Write("container-window-opened", id.ToString("D"));
         }
-        catch (Exception ex) { _log.Write("safe-placement-failed", "Safe placement restore failed", ex.GetType().Name); }
+        catch (Exception ex) { _log.Write("container-window-open-failed", id.ToString("D"), ex.GetType().Name); _ = ShowMessageAsync("No se pudo abrir el contenedor. Revisa el almacenamiento local o su posición guardada."); }
+    }
+
+    private async void Container_RightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        var row = FindListRow(e.OriginalSource as DependencyObject);
+        if (row?.Tag is not Guid id) return;
+        var menu = new MenuFlyout();
+        menu.Items.Add(new MenuFlyoutItem { Text = "Abrir", Command = new SimpleCommand(() => OpenContainer(id)) });
+        menu.Items.Add(new MenuFlyoutItem { Text = "Renombrar…", Command = new SimpleCommand(async () => await RenameContainerAsync(id)) });
+        menu.Items.Add(new MenuFlyoutItem { Text = "Eliminar contenedor…", Command = new SimpleCommand(async () => await DeleteContainerAsync(id)) });
+        menu.ShowAt(ContainersList, e.GetPosition(ContainersList));
+    }
+
+    private static ListViewItem? FindListRow(DependencyObject? current)
+    {
+        while (current is not null and not ListViewItem) current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
+        return current as ListViewItem;
+    }
+
+    private async Task RenameContainerAsync(Guid id)
+    {
+        var container = _service.Get(id);
+        if (container is null) return;
+        var box = new TextBox { Text = container.Name, MaxLength = ContainerRules.MaximumNameLength };
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Renombrar contenedor", Content = box, PrimaryButtonText = "Guardar", CloseButtonText = "Cancelar" };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        var result = _service.Rename(id, box.Text);
+        if (!result.Succeeded) await ShowMessageAsync(result.Message); else { await RefreshContainersAsync(); if (_windows.TryGetValue(id, out var win)) { win.RefreshFromRepository(); win.Activate(); } }
+    }
+
+    private async Task DeleteContainerAsync(Guid id)
+    {
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = "Eliminar contenedor", Content = "Se eliminarán el contenedor y sus referencias guardadas en NexSpace. Los archivos, carpetas y aplicaciones originales no se moverán ni eliminarán.", PrimaryButtonText = "Eliminar contenedor", CloseButtonText = "Cancelar", DefaultButton = ContentDialogButton.Close };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+        var result = _service.Delete(id);
+        if (!result.Succeeded) await ShowMessageAsync(result.Message);
+        else if (_windows.Remove(id, out var window)) window.Close();
+        await RefreshContainersAsync();
     }
 
     private async void Diagnostics_Click(object sender, RoutedEventArgs e)
     {
-        var caps = _desktop.Probe();
-        var displays = _displays.GetDisplays();
-        var iconVisibility = _icons.GetVisibility() is bool visible ? (visible ? "visible" : "ocultos") : "desconocida / consulta no disponible";
-        var details = $"FLOATING: soportado\nDESKTOP: experimental (solo orden Z bajo)\nVisibilidad de iconos (solo lectura): {iconVisibility}\nMonitores detectados: {displays.Count}\nSistema: {Environment.OSVersion.Version}\n.NET: {RuntimeInformation.FrameworkDescription}\n\n{caps.Explanation}\n\nLog local: %LOCALAPPDATA%\\NexSpace\\logs\\events.jsonl";
-        await ShowMessageAsync(details, "Diagnóstico de Fase 0");
-        _log.Write("diagnostics-opened", "Capabilities and display details viewed");
+        var detail = $"Fase 1 · NexContainers\nPresentación: FLOATING\nIntegración DESKTOP: experimental, desacoplada y no utilizada\nContenedores: {ContainersList.Items.Count}\nBase local: %LOCALAPPDATA%\\NexSpace\\data\\nexspace.db\nReferencias: abrir/quitar no modifica el recurso original.";
+        await ShowMessageAsync(detail, "Diagnóstico");
     }
 
-    private async Task ShowMessageAsync(string message, string title = "NexSpace")
+    private async Task ShowMessageAsync(string text, string title = "NexSpace")
     {
-        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = title, Content = message, CloseButtonText = "Cerrar" };
+        var dialog = new ContentDialog { XamlRoot = XamlRoot, Title = title, Content = text, CloseButtonText = "Cerrar" };
         await dialog.ShowAsync();
     }
 
-    private void Exit_Click(object sender, RoutedEventArgs e)
-    {
-        _log.Write("shutdown-requested", "User requested application exit");
-        ClosePanelSafely();
-        App.MainWindow?.Close();
-    }
+    private void Exit_Click(object sender, RoutedEventArgs e) => App.MainWindow?.Close();
+    private void Recover_Click(object sender, RoutedEventArgs e) => EmergencyRestore("console");
+}
 
-    private void Panel_Closed(WindowHandle handle)
-    {
-        if (_panel?.Id != handle.Id) return;
-        _panel = null;
-        _desktopMode = false;
-        ModeText.Text = "FLOATING";
-        IntegrationText.Text = "Panel cerrado";
-        DesktopButton.Content = "Probar modo Desktop…";
-        PanelButton.Content = "Abrir panel";
-        _log.Write("panel-closed", "Demo panel closed");
-    }
+internal sealed class SimpleCommand(Action action) : System.Windows.Input.ICommand
+{
+    public event EventHandler? CanExecuteChanged { add { } remove { } }
+    public bool CanExecute(object? parameter) => true;
+    public void Execute(object? parameter) => action();
 }

@@ -1,6 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\NexSpace.Application\NexSpace.Application.csproj" />
     <ProjectReference Include="..\NexSpace.Domain\NexSpace.Domain.csproj" />
   </ItemGroup>

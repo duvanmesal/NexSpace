@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\NexSpace.Domain\NexSpace.Domain.csproj" />
     <ProjectReference Include="..\..\src\NexSpace.Application\NexSpace.Application.csproj" />
+    <ProjectReference Include="..\..\src\NexSpace.Presentation\NexSpace.Presentation.csproj" />
   </ItemGroup>
 
 </Project>

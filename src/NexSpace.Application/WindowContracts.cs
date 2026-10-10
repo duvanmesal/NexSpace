@@ -37,6 +37,16 @@ public interface IEventLog { void Write(string eventName, string detail, string?
 
 public static class PlacementPolicy
 {
+    public static WindowPlacement KeepFullyVisible(WindowPlacement placement, DisplayInfo display)
+    {
+        var safe = KeepVisible(placement, display);
+        return safe with
+        {
+            X = Math.Clamp(safe.X, display.WorkX, display.WorkX + display.WorkWidth - safe.Width),
+            Y = Math.Clamp(safe.Y, display.WorkY, display.WorkY + display.WorkHeight - safe.Height)
+        };
+    }
+
     public static WindowPlacement KeepVisible(WindowPlacement placement, DisplayInfo display, int grip = 80)
     {
         var width = Math.Clamp(placement.Width, grip, display.WorkWidth);

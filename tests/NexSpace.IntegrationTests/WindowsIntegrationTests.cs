@@ -1,4 +1,6 @@
 using NexSpace.Windows;
+using NexSpace.Application;
+using NexSpace.Domain;
 using System.Runtime.InteropServices;
 
 namespace NexSpace.IntegrationTests;
@@ -19,6 +21,22 @@ public class WindowsIntegrationTests
             Assert.True(display.WorkHeight > 0);
             Assert.True(display.Dpi > 0);
         });
+    }
+
+    [Fact]
+    public void Resource_probe_reports_missing_and_allowlisted_system_targets_without_opening_them()
+    {
+        var platform = new WindowsContainerItemPlatformService();
+        var missing = new ContainerItemReference(Guid.NewGuid(), ContainerItemKind.File,
+            Path.Combine(Path.GetTempPath(), "NexSpace-does-not-exist-" + Guid.NewGuid().ToString("N")), "missing", "Missing", 0, DateTimeOffset.UtcNow);
+        var missingResult = platform.Inspect(missing);
+        Assert.False(missingResult.Exists);
+        Assert.Equal("missing", missingResult.Code);
+
+        var system = missing with { Kind = ContainerItemKind.SystemResource, Target = "shell:Downloads" };
+        Assert.True(platform.Inspect(system).Exists);
+        var unsupported = system with { Target = "file:///C:/not-an-approved-system-target" };
+        Assert.Equal("unsupported-resource", platform.Inspect(unsupported).Code);
     }
 
     [Fact]

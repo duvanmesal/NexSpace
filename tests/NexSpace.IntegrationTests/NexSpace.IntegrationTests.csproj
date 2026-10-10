@@ -21,6 +21,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\NexSpace.Infrastructure\NexSpace.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\NexSpace.Windows\NexSpace.Windows.csproj" />
+    <ProjectReference Include="..\..\src\NexSpace.Presentation\NexSpace.Presentation.csproj" />
   </ItemGroup>
 
 </Project>

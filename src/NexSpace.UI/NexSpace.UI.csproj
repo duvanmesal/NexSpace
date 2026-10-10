@@ -57,6 +57,7 @@
     <ProjectReference Include="..\NexSpace.Application\NexSpace.Application.csproj" />
     <ProjectReference Include="..\NexSpace.Infrastructure\NexSpace.Infrastructure.csproj" />
     <ProjectReference Include="..\NexSpace.Windows\NexSpace.Windows.csproj" />
+    <ProjectReference Include="..\NexSpace.Presentation\NexSpace.Presentation.csproj" />
   </ItemGroup>
 
   <!--
