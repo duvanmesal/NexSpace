@@ -171,7 +171,7 @@ public sealed class SqliteContainerRepository(string databasePath) : IContainerR
         return item;
     }
 
-    private SqliteConnection Open()
+    internal SqliteConnection Open()
     {
         var path = new SqliteConnectionStringBuilder(_connectionString).DataSource;
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
@@ -191,17 +191,19 @@ public sealed class SqliteContainerRepository(string databasePath) : IContainerR
         using var version = connection.CreateCommand();
         version.CommandText = "PRAGMA user_version";
         var current = Convert.ToInt32(version.ExecuteScalar());
-        if (current > 1) throw new InvalidOperationException("Database schema is newer than this application.");
-        if (current == 1) return;
+        if (current > 2) throw new InvalidOperationException("Database schema is newer than this application.");
+        if (current == 2) return;
         using var transaction = connection.BeginTransaction();
         using var schema = connection.CreateCommand();
         schema.Transaction = transaction;
-        schema.CommandText = """
+        schema.CommandText = (current == 0 ? """
             CREATE TABLE containers(id TEXT PRIMARY KEY,name TEXT NOT NULL COLLATE NOCASE UNIQUE,sort_order INTEGER NOT NULL,is_collapsed INTEGER NOT NULL,is_position_locked INTEGER NOT NULL,view_mode INTEGER NOT NULL,accent_key TEXT NOT NULL,monitor_key TEXT NOT NULL,x INTEGER NOT NULL,y INTEGER NOT NULL,width INTEGER NOT NULL,height INTEGER NOT NULL,created_utc TEXT NOT NULL,updated_utc TEXT NOT NULL);
             CREATE TABLE items(id TEXT PRIMARY KEY,kind INTEGER NOT NULL,target TEXT NOT NULL,target_key TEXT NOT NULL UNIQUE,added_utc TEXT NOT NULL);
             CREATE TABLE container_items(container_id TEXT NOT NULL REFERENCES containers(id) ON DELETE CASCADE,item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,sort_order INTEGER NOT NULL,display_name TEXT NOT NULL,PRIMARY KEY(container_id,item_id));
             CREATE INDEX ix_container_items_order ON container_items(container_id,sort_order);
-            PRAGMA user_version=1;
+            """ : "") + """
+            CREATE TABLE workspace_state(id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, definition TEXT NOT NULL);
+            PRAGMA user_version=2;
             """;
         schema.ExecuteNonQuery();
         transaction.Commit();

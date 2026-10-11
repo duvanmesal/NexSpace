@@ -46,8 +46,14 @@ public sealed partial class MainWindow : Window
 
         AppWindow.SetIcon("Assets/AppIcon.ico");
         AppWindow.Resize(new global::Windows.Graphics.SizeInt32(1080, 720));
+        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+        {
+            presenter.PreferredMinimumWidth = 900;
+            presenter.PreferredMinimumHeight = 620;
+        }
 
         // Navigate the root frame to the main page on startup.
+        RootFrame.NavigationFailed += (_, args) => new NexSpace.Infrastructure.JsonEventLog().Write("manager-navigation-failed", "No se pudo abrir NexManager.", args.Exception.GetType().Name);
         RootFrame.Navigate(typeof(MainPage));
     }
 }
