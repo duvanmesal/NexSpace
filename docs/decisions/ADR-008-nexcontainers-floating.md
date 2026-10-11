@@ -1,5 +1,7 @@
 # ADR-008 · NexContainers sobre ventanas FLOATING
 
+Actualización 2026-10-11: el usuario acepta Fase 1 con alcance condicionado y autoriza Fase 2. Se conservan los pendientes documentados, sin elevarlos a PASS. Las restricciones históricas de no implementar NexDock/NexManager se aplicaban a la entrega Fase 1; su integración posterior se registra en ADR-009. No cambia la decisión FLOATING ni se certifica DESKTOP.
+
 - **Estado:** aceptada para Fase 1.
 - **Fecha:** 2026-10-10.
 - **Contexto:** Fase 0 validó funcionalidad básica FLOATING; DESKTOP continúa experimental y no es requisito.

@@ -9,8 +9,10 @@ Antes de planificar o editar archivos, leer:
 Visual principal: `assets/references/concepts/03_C_sistema_hibrido_APROBADO.png`.
 
 ## Alcance y seguridad
-- La **Fase 1 (NexContainers) está autorizada**. Completar implementación, pruebas y documentación de NexContainers; detenerse al cerrar esta fase. **No iniciar Fase 2** (NexDock/NexManager) sin autorización explícita.
-- Fase 0 tiene alcance condicionado: FLOATING es la base funcional aprobada; DESKTOP sigue experimental, desacoplado y **deshabilitado**. Todos los contenedores de Fase 1 deben usar FLOATING. No ejecutar integración de escritorio ni habilitarla por defecto.
+- La **Fase 1 está aceptada con alcance condicionado** (2026-10-11). Conservar pendientes: drag-and-drop físico, accesibilidad, DPI/multimonitor, translucidez, animaciones y perfilado de memoria. No declararlos PASS sin evidencia.
+- La **Fase 2 (NexDock/NexManager integrados) está autorizada**. Compartir servicios, persistencia y ciclo de vida con NexContainers. Crear commits locales de Fase 2, sin push hasta revisión. **No iniciar Fase 3** sin autorización explícita.
+- No habilitar inicio con Windows sin autorización adicional. No ejecutar HWND_BOTTOM, reiniciar Explorer, cambiar sus opciones/iconos ni activar Developer Mode.
+- Fase 0 tiene alcance condicionado: FLOATING es la base funcional aprobada; DESKTOP sigue experimental, desacoplado y **deshabilitado**. Todos los contenedores, NexDock y NexManager deben usar FLOATING. No ejecutar integración de escritorio ni habilitarla por defecto.
 - No reemplazar Explorer, modificar claves del sistema o cambiar la visibilidad de iconos sin aprobación explícita.
 - No mover, copiar, renombrar o borrar archivos personales para pruebas. Usar solamente archivos de prueba aislados.
 - NexContainers administra referencias: agregar por selector o drag-and-drop no debe mover, copiar, renombrar ni borrar el original. Quitar referencias o contenedores solo elimina metadatos locales.
@@ -27,4 +29,4 @@ Visual principal: `assets/references/concepts/03_C_sistema_hibrido_APROBADO.png`
 - Anotar versiones reales y decisiones nuevas en `docs/decisions/`.
 - No modificar las decisiones aprobadas sin solicitar aprobación.
 - Al cerrar Fase 1, actualizar propuesta, arquitectura, ADR aplicable y matriz de validación. Separar pruebas automatizadas, smoke tests y evidencia manual reportada/pendiente; dar pasos precisos para validación visual.
-- Al terminar Fase 1, resumir evidencia, riesgos y validaciones manuales pendientes; detenerse antes de Fase 2.
+- Al terminar Fase 2, resumir evidencia, riesgos y validaciones manuales pendientes; detenerse antes de Fase 3.

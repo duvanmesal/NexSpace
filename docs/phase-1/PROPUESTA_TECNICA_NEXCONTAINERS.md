@@ -1,5 +1,7 @@
 # Propuesta técnica · Fase 1 — NexContainers sobre FLOATING
 
+Actualización 2026-10-11: Fase 1 aceptada condicionalmente por el usuario; Fase 2 autorizada. Los pendientes de validación permanecen en PHASE1_VALIDATION, y la arquitectura integrada posterior se documenta en PHASE2_WORKSPACE/ADR-009. El resto conserva el alcance histórico de esta propuesta.
+
 **Estado:** implementada y consolidada; recorrido funcional real y suites automatizadas satisfactorios en sus alcances. Aceptación condicionada a drag-and-drop físico, estética final y validaciones de entorno pendientes (ver `docs/testing/PHASE1_VALIDATION.md`).
 **Base:** decisiones de producto aprobadas, arquitectura modular actual y validación funcional básica de FLOATING en Fase 0.
 

@@ -1,5 +1,11 @@
 # Validación de Fase 1 · NexContainers
 
+## Cierre condicionado aprobado · 2026-10-11
+
+El usuario acepta FLOATING y NexContainers como base funcional y autoriza Fase 2. Esta aprobación no transforma los pendientes en PASS: drag-and-drop físico sigue BLOCKED; accesibilidad, DPI/multimonitor, translucidez activa, animaciones y perfilado de memoria continúan pendientes. El resto del documento conserva la evidencia histórica, incluidas las restricciones vigentes durante esas sesiones.
+
+Reverificación antes de publicar: restore y solución Debug/Release x64 PASS, 0 errores/advertencias; 15 unitarias y 15 de integración Debug PASS. Revisión de los árboles de 5d076a6 y 8f7b873 sin capturas privadas, bases, archivos generados ni patrones de secretos. El usuario autorizó explícitamente conservar los metadatos de autor de Git. Fetch mostró origin/main antecesor compatible (0 commits remotos exclusivos, 2 locales). Push normal de los dos commits completado y remoto comprobado en 8f7b873e457f6b03750ae92288b02cae3585559a. Sin force ni reescritura. Fase 2 permanece local hasta revisión.
+
 **Fecha:** 2026-10-10. **Resultado:** validación funcional real amplia, pero aceptación integral pendiente. FLOATING es la única presentación activa; DESKTOP sigue experimental y deshabilitado. No se inició Fase 2.
 
 **Consolidación final:** NexGlass, iconos Shell, ViewModel portable, procesamiento seguro de drop y refuerzo de recursos/permisos implementados. Restore, Debug/Release x64 y 15 unitarias + 15 de integración por configuración PASS. Pruebas nativas iniciales y consolidación se distinguen abajo. DnD físico permanece BLOCKED; no declarar aceptación integral ni iniciar Fase 2.

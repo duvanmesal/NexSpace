@@ -2,7 +2,7 @@
 
 NexSpace es un organizador modular para el escritorio de Windows 11. La dirección visual aprobada combina contenedores compactos con un dock flotante opcional, siguiendo el concepto C de `assets/references/concepts/03_C_sistema_hibrido_APROBADO.png`.
 
-El repositorio contiene la implementación consolidada de **Fase 1 · NexContainers**, basada en ventanas FLOATING: consola, contenedores independientes, referencias locales, SQLite y apertura explícita mediante asociaciones de Windows. NexGlass comparte estilos, tiles, iconos nativos y material con fallback sólido. La matriz distingue pruebas automatizadas, recorridos reales y pendientes; drag-and-drop físico sigue BLOCKED en la herramienta, no se declara aceptación integral.
+El repositorio contiene **Fase 1 aceptada condicionalmente** y la implementación integrada de **Fase 2 · NexDock y NexManager**. Un proceso comparte contenedores FLOATING, categorías propias o enlazadas en vivo, referencias locales, SQLite, recuperación y apertura explícita mediante Windows Shell. NexGlass comparte estilos, tiles, iconos nativos y material con fallback sólido. Drag-and-drop físico, accesibilidad, DPI/multimonitor, translucidez, animación y perfilado siguen pendientes; no se declara aceptación integral ni compatibilidad DESKTOP.
 
 ## Principios del producto
 
@@ -27,7 +27,7 @@ NexSpace.UnitTests ── Domain, Application, Presentation
 NexSpace.IntegrationTests ── Infrastructure, Windows, Presentation
 ```
 
-`NexSpace.UI` alberga WinUI 3, la consola y una ventana independiente por contenedor. `Application` define servicios y contratos; `Presentation` expone estado observable y comandos de referencias sin WinUI. `Domain` mantiene reglas independientes. `Infrastructure` persiste metadatos SQLite y registros sin rutas de recursos. `Windows` encapsula monitores y apertura/inspección Shell. Recursos reutilizables, ciclo de vida y deuda acotada de consola/code-behind están en `docs/architecture/PHASE1_CONTAINERS.md`. NexDock/NexManager y DESKTOP integrado no forman parte de esta fase.
+`NexSpace.UI` alberga WinUI 3, NexManager, NexDock y ventanas por contenedor bajo un coordinador común. `Application` define servicios y contratos; `Presentation` expone estado observable sin WinUI. `Domain` mantiene reglas independientes. `Infrastructure` persiste SQLite y registros sin rutas de recursos. `Windows` encapsula monitores y Shell. Véase [arquitectura integrada](docs/architecture/PHASE2_WORKSPACE.md). El wiring nativo conserva code-behind; no se afirma MVVM exhaustivo. DESKTOP sigue experimental y deshabilitado.
 
 ## Tecnologías y versiones
 
@@ -58,7 +58,7 @@ La razón de selección y las limitaciones del entorno constan en `docs/decision
 & "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\NexSpace.IntegrationTests\NexSpace.IntegrationTests.csproj --configuration Debug
 ```
 
-La solución mapea librerías/pruebas a AnyCPU y UI a x64. También se pueden compilar/ejecutar pruebas explícitamente con `-p:Platform=x64` (verificado); no mezclar ese override con `--no-build` sobre ensamblados construidos solo por la solución en otra carpeta. Una compilación exitosa no valida comportamiento visual ni integración de escritorio. Suites consolidadas: 15 unitarias y 15 de integración por configuración Debug/Release.
+La solución mapea librerías/pruebas a AnyCPU y UI a x64. También se pueden compilar/ejecutar pruebas explícitamente con `-p:Platform=x64` (verificado); no mezclar ese override con `--no-build` sobre ensamblados construidos solo por la solución en otra carpeta. Una compilación exitosa no valida comportamiento visual ni integración de escritorio. Suites actuales: 24 unitarias y 21 de integración por configuración Debug/Release.
 
 Para abrir el paquete de desarrollo (requiere Developer Mode):
 
@@ -73,7 +73,7 @@ Alternativa sin Developer Mode: compila como unpackaged y ejecuta el EXE. No reg
 & ".\src\NexSpace.UI\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\NexSpace.UI.exe"
 ```
 
-La evidencia está en [PHASE1_VALIDATION.md](docs/testing/PHASE1_VALIDATION.md). La decisión de FLOATING y persistencia está en [ADR-008](docs/decisions/ADR-008-nexcontainers-floating.md); DESKTOP sigue experimental según [ADR-006](docs/decisions/ADR-006-desktop-integration.md).
+La evidencia actual está en [PHASE2_VALIDATION.md](docs/testing/PHASE2_VALIDATION.md), con antecedente en [PHASE1_VALIDATION.md](docs/testing/PHASE1_VALIDATION.md). La integración y migración SQLite v2 se explican en [ADR-009](docs/decisions/ADR-009-integrated-workspace.md); DESKTOP sigue experimental según [ADR-006](docs/decisions/ADR-006-desktop-integration.md). No usar binarios antiguos de Fase 1 sobre una biblioteca migrada a v2.
 
 Para repetir la demostración aislada persistente, consultar el comando Release unpackaged de la matriz. `NEXSPACE_DATA_DIR` permite conservar una biblioteca de prueba entre reinicios sin usar datos personales. Windows decide si permite acrílico/animaciones: no es necesario cambiar ajustes para usar la alternativa sólida.
 
@@ -91,4 +91,4 @@ Antes de publicar, revisar `git status`, `git diff --cached` y la lista de archi
 - `docs/phase-0/PLAN_Y_CRITERIOS.md`: plan y matriz de evidencia de Fase 0.
 - `assets/references/README.md`: guía de referencias visuales.
 
-No avanzar a Fase 2 hasta revisar las pruebas manuales pendientes de Fase 1.
+Fase 2 autorizada; sus commits permanecen locales hasta revisión del usuario. No avanzar a Fase 3. Estado y pendientes en [roadmap](docs/ROADMAP.md).

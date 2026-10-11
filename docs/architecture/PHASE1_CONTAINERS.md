@@ -1,5 +1,7 @@
 # Arquitectura de NexContainers · Fase 1
 
+Nota 2026-10-11: documentación histórica de Fase 1 aceptada condicionalmente. La migración a esquema v2 y coordinación integrada de NexManager/NexDock autorizadas se describen en [PHASE2_WORKSPACE](PHASE2_WORKSPACE.md); no se alteran los pendientes de validación de esta fase.
+
 ## Dependencias
 
 ```text
