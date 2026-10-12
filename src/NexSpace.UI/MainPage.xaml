@@ -36,20 +36,37 @@
    <Grid x:Name="ContainersSection" Visibility="Collapsed">
     <Grid RowDefinitions="Auto,*" RowSpacing="16" Margin="8,12">
      <StackPanel Orientation="Horizontal" Spacing="10"><Button Content="Nuevo contenedor" Click="Create_Click"/><Button Content="Actualizar" Click="Refresh_Click"/><TextBlock Text="Abre un contenedor para editarlo." VerticalAlignment="Center" Foreground="{ThemeResource NexSecondaryTextBrush}"/></StackPanel>
-     <ListView Grid.Row="1" x:Name="ContainersList" ItemContainerStyle="{StaticResource NamedEntityItemStyle}" ItemsSource="{Binding Containers}" IsItemClickEnabled="True" ItemClick="Container_ItemClick" RightTapped="Container_RightTapped" SelectionMode="Single" HorizontalContentAlignment="Stretch">
-      <ListView.ItemTemplate><DataTemplate><Border Style="{StaticResource NexLibrarySurfaceStyle}" Padding="16,12"><Grid ColumnDefinitions="*,Auto"><StackPanel Spacing="4"><TextBlock Text="{Binding Name}" Style="{StaticResource NexTitleStyle}"/><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="{Binding Items.Count}"/><TextBlock Text="referencias · FLOATING" Foreground="{ThemeResource NexSecondaryTextBrush}"/></StackPanel></StackPanel><Border Grid.Column="1" Style="{StaticResource NexAffordanceChipStyle}" VerticalAlignment="Center"><StackPanel Orientation="Horizontal" Spacing="6"><FontIcon Glyph="&#xE8A7;" FontSize="12" Foreground="{ThemeResource NexSeaBrush}"/><TextBlock Text="Abrir" Foreground="{ThemeResource NexSeaBrush}" FontSize="12"/></StackPanel></Border></Grid></Border></DataTemplate></ListView.ItemTemplate>
-     </ListView>
+     <Grid Grid.Row="1">
+      <ListView x:Name="ContainersList" ItemContainerStyle="{StaticResource NamedEntityItemStyle}" ItemsSource="{Binding Containers}" IsItemClickEnabled="True" ItemClick="Container_ItemClick" RightTapped="Container_RightTapped" SelectionMode="Single" HorizontalContentAlignment="Stretch">
+       <ListView.ItemTemplate><DataTemplate><Border Style="{StaticResource NexLibrarySurfaceStyle}" Padding="16,12"><Grid ColumnDefinitions="*,Auto"><StackPanel Spacing="4"><TextBlock Text="{Binding Name}" Style="{StaticResource NexTitleStyle}"/><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="{Binding Items.Count}"/><TextBlock Text="referencias · FLOATING" Foreground="{ThemeResource NexSecondaryTextBrush}"/></StackPanel></StackPanel><Border Grid.Column="1" Style="{StaticResource NexAffordanceChipStyle}" VerticalAlignment="Center"><StackPanel Orientation="Horizontal" Spacing="6"><FontIcon Glyph="&#xE8A7;" FontSize="12" Foreground="{ThemeResource NexSeaBrush}"/><TextBlock Text="Abrir" Foreground="{ThemeResource NexSeaBrush}" FontSize="12"/></StackPanel></Border></Grid></Border></DataTemplate></ListView.ItemTemplate>
+      </ListView>
+      <StackPanel x:Name="ContainersEmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="10" Visibility="Collapsed" MaxWidth="320">
+       <FontIcon Glyph="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="32" Foreground="{ThemeResource NexSecondaryTextBrush}" HorizontalAlignment="Center"/>
+       <TextBlock Text="Aún no tienes contenedores" FontSize="16" FontWeight="SemiBold" HorizontalAlignment="Center"/>
+       <TextBlock Text="Un contenedor agrupa referencias a archivos, carpetas o apps sin moverlas de su ubicación." Foreground="{ThemeResource NexSecondaryTextBrush}" FontSize="12" TextWrapping="Wrap" TextAlignment="Center"/>
+       <Button Content="Nuevo contenedor" Click="Create_Click" HorizontalAlignment="Center"/>
+      </StackPanel>
+     </Grid>
     </Grid>
    </Grid>
    <Grid x:Name="DockSection" Visibility="Collapsed">
     <Grid ColumnDefinitions="280,*" ColumnSpacing="20" Margin="8,12">
      <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
       <Button Content="Nueva categoría" Click="CreateCategory_Click"/>
-      <ListView Grid.Row="1" x:Name="CategoriesList" ItemsSource="{Binding Categories}" SelectionChanged="Category_SelectionChanged"><ListView.ItemTemplate><DataTemplate><StackPanel Orientation="Horizontal" Spacing="12" Padding="8"><FontIcon Glyph="{Binding Glyph}" FontSize="20"/><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" MaxWidth="180"/></StackPanel></DataTemplate></ListView.ItemTemplate></ListView>
+      <Grid Grid.Row="1">
+       <ListView x:Name="CategoriesList" ItemsSource="{Binding Categories}" SelectionChanged="Category_SelectionChanged"><ListView.ItemTemplate><DataTemplate><StackPanel Orientation="Horizontal" Spacing="12" Padding="8"><FontIcon Glyph="{Binding Glyph}" FontSize="20"/><TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" MaxWidth="180"/></StackPanel></DataTemplate></ListView.ItemTemplate></ListView>
+       <StackPanel x:Name="CategoriesEmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8" Visibility="Collapsed" Padding="12">
+        <FontIcon Glyph="&#xE8FD;" FontFamily="Segoe Fluent Icons" FontSize="24" Foreground="{ThemeResource NexSecondaryTextBrush}" HorizontalAlignment="Center"/>
+        <TextBlock Text="Sin categorías todavía" FontSize="13" FontWeight="SemiBold" TextAlignment="Center" TextWrapping="Wrap"/>
+        <TextBlock Text="Crea una para organizar accesos en el dock." Foreground="{ThemeResource NexSecondaryTextBrush}" FontSize="11" TextWrapping="Wrap" TextAlignment="Center"/>
+       </StackPanel>
+      </Grid>
       <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
        <Button Style="{StaticResource NexQuietButtonStyle}" AutomationProperties.Name="Subir categoría" ToolTipService.ToolTip="Subir categoría" Click="CategoryUp_Click"><FontIcon Glyph="&#xE74A;" FontFamily="Segoe Fluent Icons" FontSize="14"/></Button>
        <Button Style="{StaticResource NexQuietButtonStyle}" AutomationProperties.Name="Bajar categoría" ToolTipService.ToolTip="Bajar categoría" Click="CategoryDown_Click"><FontIcon Glyph="&#xE74B;" FontFamily="Segoe Fluent Icons" FontSize="14"/></Button>
-       <Button Content="Editar" Click="EditCategory_Click"/><Button Content="Quitar…" Click="DeleteCategory_Click"/>
+       <Button Content="Editar" Click="EditCategory_Click"/>
+       <Rectangle Width="1" Height="20" Fill="{ThemeResource NexDividerBrush}" Margin="0,0,0,0"/>
+       <Button Content="Quitar…" Style="{StaticResource NexDestructiveButtonStyle}" Click="DeleteCategory_Click"/>
       </StackPanel>
      </Grid>
      <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="12">
@@ -70,12 +87,15 @@
    <ScrollViewer x:Name="ProfilesSection" Visibility="Collapsed"><StackPanel Spacing="16" MaxWidth="680" HorizontalAlignment="Left">
     <TextBlock Text="Espacios de trabajo" FontSize="26" FontWeight="SemiBold"/>
     <TextBlock Text="Cada espacio conserva contenedores, referencias, dock y apariencia. Los cambios se guardan inmediatamente; cambiar de espacio no cierra otras aplicaciones." TextWrapping="Wrap"/>
+    <TextBlock x:Name="ProfileStateText" TextWrapping="Wrap" FontWeight="SemiBold"/>
     <ListView x:Name="ProfilesList" ItemContainerStyle="{StaticResource NamedEntityItemStyle}" DisplayMemberPath="Name" MinWidth="400" MaxHeight="280"/>
-    <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Crear" Click="CreateProfile_Click"/><Button Content="Duplicar activo" Click="DuplicateProfile_Click"/><Button Content="Renombrar" Click="RenameProfile_Click"/></StackPanel>
-    <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Cambiar al seleccionado" Click="SwitchProfile_Click"/><Button Content="Eliminar…" Click="DeleteProfile_Click"/></StackPanel>
+    <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Crear" Click="CreateProfile_Click"/><Button Content="Duplicar activo" Click="DuplicateProfile_Click"/><Button Content="Renombrar" Click="RenameProfile_Click"/><Button Content="Cambiar al seleccionado" Click="SwitchProfile_Click"/></StackPanel>
     <CheckBox x:Name="RestoreLastProfileBox" Content="Restaurar último espacio al iniciar"/>
     <Button Content="Usar seleccionado como predeterminado y guardar" Click="DefaultProfile_Click"/>
-    <TextBlock x:Name="ProfileStateText" TextWrapping="Wrap" Foreground="{ThemeResource NexSecondaryTextBrush}"/>
+    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+     <Rectangle Width="1" Height="20" Fill="{ThemeResource NexDividerBrush}" Margin="0,0,4,0"/>
+     <Button Content="Eliminar…" Style="{StaticResource NexDestructiveButtonStyle}" ToolTipService.ToolTip="No se puede eliminar el espacio activo ni el predeterminado" Click="DeleteProfile_Click"/>
+    </StackPanel>
    </StackPanel></ScrollViewer>
    <ScrollViewer x:Name="AppearanceSection" Visibility="Collapsed"><StackPanel Spacing="16" MaxWidth="660" HorizontalAlignment="Left">
     <TextBlock Text="NexGlass · Apariencia" FontSize="26" FontWeight="SemiBold"/>

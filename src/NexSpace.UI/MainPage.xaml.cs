@@ -51,7 +51,7 @@ public sealed partial class MainPage : Page
             if (!ViewModel.Reload()) return;
             var startup = ViewModel.Snapshot;
             _log.Write("manager-workspace-loaded", "Loading settings controls");
-            Profiles.Reload(); LoadProfiles(); LoadSettings(); LoadAppearance(); UpdateDiagnostic();
+            Profiles.Reload(); LoadProfiles(); LoadSettings(); LoadAppearance(); UpdateDiagnostic(); UpdateEmptyStates();
             _log.Write("manager-settings-loaded", "Starting floating session");
             _windows.StartSession(startup);
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => StartupDiagnostics.Mark(_log, "manager-dispatch-ready"));
@@ -63,8 +63,13 @@ public sealed partial class MainPage : Page
     private void WorkspaceChanged()
     {
         if (_shuttingDown || _refreshing) return;
-        try { _refreshing = true; var id = _selectedCategory; ViewModel.Reload(); CategoriesList.SelectedItem = ViewModel.Categories.FirstOrDefault(c => c.Id == id); _selectedCategory = id; RefreshCategory(); _windows.Refresh(); Visuals.NexThemeManager.Apply(ViewModel.Snapshot.Theme); }
+        try { _refreshing = true; var id = _selectedCategory; ViewModel.Reload(); CategoriesList.SelectedItem = ViewModel.Categories.FirstOrDefault(c => c.Id == id); _selectedCategory = id; RefreshCategory(); _windows.Refresh(); Visuals.NexThemeManager.Apply(ViewModel.Snapshot.Theme); UpdateEmptyStates(); }
         finally { _refreshing = false; }
+    }
+    private void UpdateEmptyStates()
+    {
+        ContainersEmptyState.Visibility = ViewModel.Containers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        CategoriesEmptyState.Visibility = ViewModel.Categories.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
     private void ShowManager(Guid? categoryId)
     {
