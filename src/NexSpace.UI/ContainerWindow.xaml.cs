@@ -40,13 +40,13 @@ public sealed partial class ContainerWindow : Window
         _container = service.Get(containerId) ?? throw new InvalidOperationException("El contenedor no existe.");
         ViewModel = new ContainerViewModel(service, platform, containerId, _log);
         InitializeComponent();
+        if (DiagnosticProbe.IsRequested && Environment.GetEnvironmentVariable("NEXSPACE_PROBE_DISABLE_DROP") == "1") ItemsView.AllowDrop = false;
         Root.DataContext = ViewModel;
-        NexGlassWindow.Apply(this, Root);
         NexThemeManager.Register(this, Root);
         _placementSaveTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         _placementSaveTimer.Interval = TimeSpan.FromMilliseconds(350);
         _placementSaveTimer.IsRepeating = false;
-        _placementSaveTimer.Tick += (_, _) => PersistCurrentPlacement();
+        _placementSaveTimer.Tick += PlacementTimerTick;
         Title = _container.Name;
 
         ExtendsContentIntoTitleBar = true;
@@ -65,9 +65,27 @@ public sealed partial class ContainerWindow : Window
         AppWindow.MoveAndResize(new global::Windows.Graphics.RectInt32(_container.Placement.X, _container.Placement.Y, _container.Placement.Width, _container.Placement.Height));
         _lockedPosition = AppWindow.Position;
         RefreshItems();
-        AppWindow.Closing += (_, _) => FlushPlacement();
-        AppWindow.Changed += (_, args) =>
-        {
+        AppWindow.Closing += WindowClosing;
+        AppWindow.Changed += WindowChanged;
+        Closed += (_, _) => { _closed = true; _placementSaveTimer.Stop(); _placementSaveTimer.Tick -= PlacementTimerTick; AppWindow.Closing -= WindowClosing; AppWindow.Changed -= WindowChanged; ContainerChanged = null; ItemsView.ItemsSource = null; SystemBackdrop = null; Content = null; };
+        if (new global::Windows.UI.ViewManagement.UISettings().AnimationsEnabled)
+            ContentArea.Transitions = new TransitionCollection { new EntranceThemeTransition() };
+    }
+    private void PlacementTimerTick(DispatcherQueueTimer sender, object args) => PersistCurrentPlacement();
+    private void WindowClosing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
+    {
+        FlushPlacement();
+        _closed = true;
+        _placementSaveTimer.Stop();
+        SetTitleBar(null);
+        ItemsView.AllowDrop = false;
+        ItemsView.ItemsSource = null;
+        SystemBackdrop = null;
+        Content = null;
+    }
+    private void WindowChanged(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args)
+    {
+            if (_closed) return;
             if (_correctingPosition) return;
             if (args.DidPositionChange && _container.IsPositionLocked &&
                 (AppWindow.Position.X != _lockedPosition.X || AppWindow.Position.Y != _lockedPosition.Y))
@@ -76,10 +94,6 @@ public sealed partial class ContainerWindow : Window
                 finally { _correctingPosition = false; }
             }
             _placementSaveTimer.Stop(); _placementSaveTimer.Start();
-        };
-        Closed += (_, _) => { _closed = true; _placementSaveTimer.Stop(); ItemsView.ItemsSource = null; SystemBackdrop = null; };
-        if (new global::Windows.UI.ViewManagement.UISettings().AnimationsEnabled)
-            ContentArea.Transitions = new TransitionCollection { new EntranceThemeTransition() };
     }
 
     public void RefreshFromRepository() => RefreshItems();

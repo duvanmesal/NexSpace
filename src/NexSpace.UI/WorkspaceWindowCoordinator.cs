@@ -13,6 +13,7 @@ internal sealed class WorkspaceWindowCoordinator(WorkspaceService workspace, Con
     private DockWindow? _dock;
     private bool _closing;
     public bool HasDock => _dock is not null;
+    internal int OpenContainerCount => _containers.Count;
     public void SaveCurrentSession() { foreach (var w in _containers.Values.ToArray()) w.FlushPlacement(); _dock?.FlushPlacement(); SaveSession(); }
     public void ToggleDock() { if (_dock is null) OpenDock(); else _dock.Close(); }
     public void SuspendForProfileSwitch()

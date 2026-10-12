@@ -32,7 +32,10 @@ public partial class App : Microsoft.UI.Xaml.Application
     /// </summary>
     public App()
     {
+        StartupDiagnostics.Install(new JsonEventLog());
+        StartupDiagnostics.Mark(new JsonEventLog(), "app-xaml-start");
         InitializeComponent();
+        StartupDiagnostics.Mark(new JsonEventLog(), "app-xaml-complete");
         UnhandledException += (_, args) => { var log = new JsonEventLog(); log.Write("unhandled-exception", args.Exception.GetType().Name, args.Exception.HResult.ToString("X8")); log.Write("unhandled-stack", string.Join(" | ", new System.Diagnostics.StackTrace(args.Exception, false).GetFrames().Select(f => f.GetMethod()?.ToString()))); };
     }
 

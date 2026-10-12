@@ -12,6 +12,12 @@ internal static class NexGlassWindow
     {
         try
         {
+            if (!new global::Windows.UI.ViewManagement.UISettings().AdvancedEffectsEnabled)
+            {
+                window.SystemBackdrop = null;
+                root.Background = (Brush)Microsoft.UI.Xaml.Application.Current.Resources["NexSolidSurfaceBrush"];
+                return;
+            }
             if (!DesktopAcrylicController.IsSupported()) throw new NotSupportedException();
             root.Background = (Brush)Microsoft.UI.Xaml.Application.Current.Resources["NexSurfaceBrush"];
             window.SystemBackdrop = new NexGlassBackdrop(root);

@@ -74,4 +74,17 @@
     <PublishReadyToRun>false</PublishReadyToRun>
     <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
+  <!-- SDK publish does not include the generated application XBF/PRI when MSIX tooling is disabled. -->
+  <Target Name="PublishCompiledWinUIResources" AfterTargets="Publish" Condition="'$(WindowsPackageType)' == 'None'">
+    <ItemGroup>
+      <_NexCompiledXaml Include="$(TargetDir)**\*.xbf" />
+    </ItemGroup>
+    <PropertyGroup>
+      <_NexApplicationPri>$(ProjectPriFullPath)</_NexApplicationPri>
+      <_NexApplicationPri Condition="'$(_NexApplicationPri)' == ''">$(TargetDir)$(TargetName).pri</_NexApplicationPri>
+    </PropertyGroup>
+    <Error Condition="!Exists('$(_NexApplicationPri)')" Text="Missing application PRI; refusing incomplete unpackaged publication." />
+    <Copy SourceFiles="$(_NexApplicationPri)" DestinationFiles="$(PublishDir)resources.pri" />
+    <Copy SourceFiles="@(_NexCompiledXaml)" DestinationFiles="@(_NexCompiledXaml->'$(PublishDir)%(RecursiveDir)%(Filename)%(Extension)')" />
+  </Target>
 </Project>

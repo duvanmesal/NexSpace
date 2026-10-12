@@ -1,4 +1,10 @@
 <Page x:Class="NexSpace.UI.MainPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <Page.Resources>
+  <Style x:Key="NamedEntityItemStyle" TargetType="ListViewItem">
+   <Setter Property="AutomationProperties.Name" Value="{Binding Name}"/>
+   <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+  </Style>
+ </Page.Resources>
  <Grid x:Name="ManagerRoot" Background="{ThemeResource NexSolidSurfaceBrush}" RowDefinitions="Auto,*,Auto">
   <Border Padding="24,16" BorderBrush="{ThemeResource NexDividerBrush}" BorderThickness="0,0,0,1">
    <Grid ColumnDefinitions="*,Auto">
@@ -26,7 +32,7 @@
    <Grid x:Name="ContainersSection" Visibility="Collapsed">
     <Grid RowDefinitions="Auto,*" RowSpacing="16" Margin="8,12">
      <StackPanel Orientation="Horizontal" Spacing="10"><Button Content="Nuevo contenedor" Click="Create_Click"/><Button Content="Actualizar" Click="Refresh_Click"/><TextBlock Text="Abre un contenedor para editarlo." VerticalAlignment="Center" Foreground="{ThemeResource NexSecondaryTextBrush}"/></StackPanel>
-     <ListView Grid.Row="1" x:Name="ContainersList" ItemsSource="{Binding Containers}" IsItemClickEnabled="True" ItemClick="Container_ItemClick" RightTapped="Container_RightTapped" SelectionMode="Single" HorizontalContentAlignment="Stretch">
+     <ListView Grid.Row="1" x:Name="ContainersList" ItemContainerStyle="{StaticResource NamedEntityItemStyle}" ItemsSource="{Binding Containers}" IsItemClickEnabled="True" ItemClick="Container_ItemClick" RightTapped="Container_RightTapped" SelectionMode="Single" HorizontalContentAlignment="Stretch">
       <ListView.ItemTemplate><DataTemplate><Border Style="{StaticResource NexLibrarySurfaceStyle}" Padding="16,12"><Grid ColumnDefinitions="*,Auto"><StackPanel Spacing="4"><TextBlock Text="{Binding Name}" Style="{StaticResource NexTitleStyle}"/><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="{Binding Items.Count}"/><TextBlock Text="referencias · FLOATING" Foreground="{ThemeResource NexSecondaryTextBrush}"/></StackPanel></StackPanel><TextBlock Grid.Column="1" Text="Abrir" Foreground="{ThemeResource NexSeaBrush}" VerticalAlignment="Center"/></Grid></Border></DataTemplate></ListView.ItemTemplate>
      </ListView>
     </Grid>
@@ -49,7 +55,7 @@
    <ScrollViewer x:Name="ProfilesSection" Visibility="Collapsed"><StackPanel Spacing="16" MaxWidth="680" HorizontalAlignment="Left">
     <TextBlock Text="Espacios de trabajo" FontSize="26" FontWeight="SemiBold"/>
     <TextBlock Text="Cada espacio conserva contenedores, referencias, dock y apariencia. Los cambios se guardan inmediatamente; cambiar de espacio no cierra otras aplicaciones." TextWrapping="Wrap"/>
-    <ListView x:Name="ProfilesList" DisplayMemberPath="Name" MinWidth="400" MaxHeight="280"/>
+    <ListView x:Name="ProfilesList" ItemContainerStyle="{StaticResource NamedEntityItemStyle}" DisplayMemberPath="Name" MinWidth="400" MaxHeight="280"/>
     <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Crear" Click="CreateProfile_Click"/><Button Content="Duplicar activo" Click="DuplicateProfile_Click"/><Button Content="Renombrar" Click="RenameProfile_Click"/></StackPanel>
     <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Cambiar al seleccionado" Click="SwitchProfile_Click"/><Button Content="Eliminar…" Click="DeleteProfile_Click"/></StackPanel>
     <CheckBox x:Name="RestoreLastProfileBox" Content="Restaurar último espacio al iniciar"/>

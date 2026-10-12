@@ -12,12 +12,22 @@ internal static class NexThemeManager
     {
         if (Targets.Any(t => t.Window.TryGetTarget(out var w) && ReferenceEquals(w, window))) return;
         Targets.Add((new(window), new(root))); ApplyTarget(window, root);
-        root.Loaded += (_, _) => ApplyTarget(window, root);
-        window.Closed += (_, _) => Targets.RemoveAll(t => !t.Window.TryGetTarget(out var w) || ReferenceEquals(w, window));
+        RoutedEventHandler loaded = (_, _) => ApplyTarget(window, root);
+        global::Windows.Foundation.TypedEventHandler<object, WindowEventArgs>? closed = null;
+        closed = (_, _) =>
+        {
+            root.Loaded -= loaded;
+            window.Closed -= closed;
+            Targets.RemoveAll(t => !t.Window.TryGetTarget(out var w) || ReferenceEquals(w, window));
+        };
+        root.Loaded += loaded;
+        window.Closed += closed;
     }
-    public static void Apply(ThemeSettings settings)
+    public static void Apply(ThemeSettings settings, bool force = false)
     {
-        Current = ThemeSettings.Validate(settings);
+        var validated = ThemeSettings.Validate(settings);
+        if (!force && Current == validated) return;
+        Current = validated;
         foreach (var t in Targets.ToArray()) if (t.Window.TryGetTarget(out var w) && t.Root.TryGetTarget(out var r)) ApplyTarget(w, r);
     }
     private static void ApplyTarget(Window window, Grid root)

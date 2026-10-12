@@ -39,24 +39,37 @@ internal sealed class DockWindow : Window
         AppWindow.TitleBar.ButtonForegroundColor = Microsoft.UI.Colors.White;
         AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
         if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter) { presenter.IsMaximizable = false; presenter.IsResizable = false; presenter.SetBorderAndTitleBar(false, false); }
-        NexGlassWindow.Apply(this, _root);
         NexThemeManager.Register(this, _root);
         _saveTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         _saveTimer.IsRepeating = false; _saveTimer.Interval = TimeSpan.FromMilliseconds(450);
-        _saveTimer.Tick += (_, _) => SaveFreePosition();
-        AppWindow.Changed += (_, args) =>
-        {
+        _saveTimer.Tick += SaveTimerTick;
+        AppWindow.Changed += WindowChanged;
+        _root.Loaded += RootLoaded;
+        AppWindow.Closing += WindowClosing;
+        Closed += (_, _) => { _closed = true; _saveTimer.Stop(); _saveTimer.Tick -= SaveTimerTick; AppWindow.Changed -= WindowChanged; AppWindow.Closing -= WindowClosing; _root.Loaded -= RootLoaded; if (_root.XamlRoot is { } xaml) xaml.Changed -= RootChanged; ClearButtons(); SystemBackdrop = null; Content = null; };
+        Refresh();
+    }
+    private void SaveTimerTick(DispatcherQueueTimer sender, object args) => SaveFreePosition();
+    private void WindowClosing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
+    {
+        FlushPlacement();
+        _closed = true;
+        _saveTimer.Stop();
+        if (_root.XamlRoot is { } xaml) xaml.Changed -= RootChanged;
+        SetTitleBar(null);
+        ClearButtons();
+        SystemBackdrop = null;
+        Content = null;
+    }
+    private void RootLoaded(object sender, RoutedEventArgs args) { if (_root.XamlRoot is { } xaml) { xaml.Changed -= RootChanged; xaml.Changed += RootChanged; } ApplyPlacement(); }
+    private void WindowChanged(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowChangedEventArgs args)
+    {
             if (_closed || _placing) return;
             if (args.DidPositionChange)
             {
                 if (_viewModel.Snapshot.Dock.Edge != DockEdge.Free) ApplyPlacement();
                 else { _saveTimer.Stop(); _saveTimer.Start(); }
             }
-        };
-        _root.Loaded += (_, _) => { if (_root.XamlRoot is { } xaml) xaml.Changed += RootChanged; ApplyPlacement(); };
-        AppWindow.Closing += (_, _) => FlushPlacement();
-        Closed += (_, _) => { _closed = true; _saveTimer.Stop(); if (_root.XamlRoot is { } xaml) xaml.Changed -= RootChanged; ClearButtons(); SystemBackdrop = null; };
-        Refresh();
     }
     private void RootChanged(XamlRoot sender, XamlRootChangedEventArgs args) { if (!_closed && !_placing) ApplyPlacement(); }
     private static Brush Brush(string key) => (Brush)Microsoft.UI.Xaml.Application.Current.Resources[key];
@@ -66,7 +79,7 @@ internal sealed class DockWindow : Window
         if (_closed || !_viewModel.Reload()) return;
         // Position-only persistence must not dismiss an open category popup or its keyboard focus.
         var state = _viewModel.Snapshot;
-        var key = System.Text.Json.JsonSerializer.Serialize(new { state.Categories, state.Dock.ItemSize, state.Dock.AccentKey, state.Dock.Edge, Library = _viewModel.Containers });
+        var key = DockLayoutSignature.Create(state, _viewModel.Containers);
         if (key != _layoutKey)
         {
             _layoutKey = key; ClearButtons();

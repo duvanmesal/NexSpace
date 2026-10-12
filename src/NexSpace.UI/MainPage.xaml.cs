@@ -54,6 +54,9 @@ public sealed partial class MainPage : Page
             Profiles.Reload(); LoadProfiles(); LoadSettings(); LoadAppearance(); UpdateDiagnostic();
             _log.Write("manager-settings-loaded", "Starting floating session");
             _windows.StartSession(startup);
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => StartupDiagnostics.Mark(_log, "manager-dispatch-ready"));
+            if (DiagnosticProbe.IsRequested) await RunDiagnosticProbe(containers);
+            if (_shuttingDown) return;
             if (!startup.Session.ShowManagerOnStartup && _windows.HasDock) App.MainWindow?.AppWindow.Hide();
         };
     }

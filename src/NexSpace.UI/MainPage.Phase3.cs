@@ -23,7 +23,7 @@ public sealed partial class MainPage
             pair.View.Visibility = pair.Key == section ? Visibility.Visible : Visibility.Collapsed;
         var item = ManagerNav.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(i => (string)i.Tag == section);
         if (!ReferenceEquals(ManagerNav.SelectedItem, item)) ManagerNav.SelectedItem = item;
-        if (_started) DispatcherQueue.TryEnqueue(() => NexThemeManager.Apply(ViewModel.Snapshot.Theme));
+        if (_started) DispatcherQueue.TryEnqueue(() => NexThemeManager.Apply(ViewModel.Snapshot.Theme, force: true));
     }
     private void LoadProfiles()
     {

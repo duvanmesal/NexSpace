@@ -12,6 +12,9 @@ permissions:
 jobs:
   build-and-test:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        configuration: [Debug, Release]
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -25,7 +28,21 @@ jobs:
         run: dotnet restore NexSpace.sln -p:Platform=x64
 
       - name: Build
-        run: dotnet build NexSpace.sln --configuration Release --no-restore -p:Platform=x64
+        run: dotnet build NexSpace.sln --configuration ${{ matrix.configuration }} --no-restore -p:Platform=x64
 
       - name: Test
-        run: dotnet test NexSpace.sln --configuration Release --no-build -p:Platform=x64 --logger "trx;LogFileName=test-results.trx"
+        shell: pwsh
+        run: |
+          dotnet test tests/NexSpace.UnitTests/NexSpace.UnitTests.csproj --configuration ${{ matrix.configuration }} --no-build --logger trx
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet test tests/NexSpace.IntegrationTests/NexSpace.IntegrationTests.csproj --configuration ${{ matrix.configuration }} --no-build --logger trx
+
+      - name: Validate unpackaged publication
+        if: matrix.configuration == 'Release'
+        shell: pwsh
+        run: |
+          dotnet publish src/NexSpace.UI/NexSpace.UI.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:WindowsPackageType=None -p:EnableMsixTooling=false -p:WindowsAppSDKSelfContained=true -o artifacts/unpackaged
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          foreach ($required in @('NexSpace.UI.exe','resources.pri','MainWindow.xbf','MainPage.xbf','ContainerWindow.xbf','Resources/NexGlass.xbf','Controls/ReferenceTile.xbf')) {
+            if (!(Test-Path (Join-Path artifacts/unpackaged $required))) { throw "Missing published resource: $required" }
+          }
