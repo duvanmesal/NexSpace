@@ -2,9 +2,27 @@
 
 Fecha: 2026-10-12. **En validación, no aceptada ni lista para lanzamiento 1.0.** Fase 3 aceptada condicionalmente; 0216de5/9521074 publicados por push normal tras auditoría y reverificación. Cambios de Fase 4 únicamente locales.
 
+## Revisión 4.1 · estado actualizado
+
+Informe técnico: [PHASE41_PERFORMANCE.md](PHASE41_PERFORMANCE.md). Decisión complementaria ADR-012. Se preservan debajo los ensayos fallidos anteriores: no son resultados de la candidata corregida.
+
+- PASS: evitar caption personalizado estabiliza GDI; sustituir DispatcherQueueTimer elimina el incremento por ventana de Timer/WaitCompletionPacket. Cleanup completo de Closed/XAML reduce memoria, sin atribuir todo su beneficio a una única raíz gestionada.
+- PASS de ejecución: 100 contenedores, 100 docks, 100 cambios completos de perfil, 300 contenedores + 60 s de reposo; cierre normal/código 0, todos los HWND propios destruidos, sin GC forzado ni parada de seguridad. El 0xE0464645 no se reprodujo en estos ensayos.
+- **FAIL de estabilización prolongada**: 300 contenedores, handles 1976→2585, Composition 9→308 y Event 1326→1644; privados 116396032→148463616. Mejora sustancial frente al ensayo anterior, pero no hay meseta de handles ni prueba de ausencia de fugas.
+- PASS de aislamiento: EXE WinUI independiente, sin referencias NexSpace, reproduce +100 Composition y +107 Event en 100 Window, también sin Content. Causa/ownership nativo exacto BLOCKED: informes WER históricos no contienen dump nativo con pila de asignación. No Dispose del compositor de XAML ni cierre de handles desconocidos.
+- PASS: restore coherente x64, Debug/Release x64 sin errores/advertencias, 43 unitarias +33 integración en cada configuración (152 ejecuciones). Cuatro TRX privados finales.
+- PASS: unpackaged framework-dependent y portable autocontenido; tres arranques consecutivos de la misma SQLite aislada, dos cambios de perfil por arranque y salida 0. Tras recorrido visual, Salir cerró PID 24460 con código 0; sin proceso residual antes de reabrir la demostración final PID 16852.
+- PASS de interacción real: creación/cierre de ventana sin borrar metadatos, movimiento/redimensionamiento, contracción/expansión, bloqueo/desbloqueo, hotkey global desde contenedor (failures=0), cambio Universidad→Programación→Universidad y aplicación Light→Dark. Persistencia después de salida/reinicio: Estudio (130,170,385,340), Recursos contraído y tema Dark; SQLite integrity_check=ok.
+- Evidencias auténticas: `docs/testing/evidence/private/phase41-20261012/final-*.jpg`, `experiments/`, `final-tests/`, `final-reopen.json`, `final-ui-exit.json`, `final-persistence.json` y `final-fixture-hashes.json`; excluidas de Git. No usar la captura inicial `container-recovered.jpg` recortada como validación de layout.
+- Pendientes conservados: BLOCKED drag-and-drop físico/auto-ocultamiento robusto; NOT_TESTED accesibilidad integral, DPI/multimonitor, translucidez/animaciones activas, soak de horas, memoria nativa con stacks, máquina limpia/despliegue firmado y todos los temas con tecnologías asistivas. Algunos glifos de fallback siguen mostrándose como cuadros; pendiente visual.
+
+**Fase 4 sigue abierta y 1.0 bloqueada.** DESKTOP deshabilitado; sin HWND_BOTTOM, modificaciones de Explorer/iconos, Developer Mode, inicio automático, push ni release. Worktree de diseño intacto; plan de integración separado, sin merge/cherry-pick.
+
+Reposo pasivo final de la demostración: 60,09 s, handles 2194→2198, privado 125779968→125718528, CPU +0,046875 s. PASS de estabilidad breve sin recreación, no de uso prolongado. Plan de integración de solo lectura: `docs/phase-4/PLAN_INTEGRACION_DISENO.md`. Explorer conserva PID 11128 y su inicio original; hashes de ambos fixtures intactos.
+
 ## Entorno y privacidad
 
-Windows 11 x64 26100; SDK .NET 10.0.401/runtime 10.0.12; Windows App SDK 2.5.1; SQLite 10.0.12. Datos en `%TEMP%/NexSpace-Phase4-20261012/data`, copia de la biblioteca de demostración aislada de Fase 3. No se abrió la biblioteca personal ni se modificaron originales. Capturas, volcados, trazas y resultados: `docs/testing/evidence/private/phase4-20261012/`, ignorado por Git. Herramientas dotnet-trace/gcdump/dump 10.0.750501 instaladas solamente bajo `artifacts/phase4/tools`, sin instalación global.
+Windows 11 Pro x64 **26300**, comprobado en Fase 4.1; 26100 es el target de compilación, no la build del sistema probado. SDK .NET 10.0.401/runtime 10.0.12; Windows App SDK 2.5.1; SQLite 10.0.12. Datos originales de ensayo en `%TEMP%/NexSpace-Phase4-20261012/data`, copia de la biblioteca de demostración aislada de Fase 3. No se abrió la biblioteca personal ni se modificaron originales. Capturas, volcados, trazas y resultados originales: `docs/testing/evidence/private/phase4-20261012/`, ignorado por Git; revisión actual en `phase41-20261012/`. Herramientas dotnet-trace/gcdump/dump 10.0.750501 instaladas solamente bajo `artifacts/phase4/tools`, sin instalación global.
 
 DESKTOP sigue experimental y deshabilitado. No se ejecutaron HWND_BOTTOM, WorkerW, SetParent, cambios de Explorer/iconos, Developer Mode, certificados ni inicio con Windows.
 
@@ -36,7 +54,7 @@ Validación manual breve: desde Manager recorrer las siete secciones con Tab/Shi
 
 NOT_TESTED: incremento aislado de memoria por cada contenedor/categoría, primer frame realmente interactivo, soak de varias horas y análisis de retenciones nativas. Las muestras de ciclos combinan múltiples factores; no atribuirlas a un coste fijo por elemento.
 
-Compatibilidad: PASS limitado en Windows 11 x64 26100 con runtime local/autocontenido y arranques breves; Windows 11 22000 es mínimo declarado, no probado aquí; ARM64/x86/Windows 10, entorno limpio y despliegue firmado NOT_TESTED. Sin certificación de accesibilidad, multimonitor ni integración de escritorio.
+Compatibilidad: PASS limitado en Windows 11 x64 26300 (corrección de etiqueta en revisión 4.1) con runtime local/autocontenido y arranques breves; Windows 11 22000 es mínimo declarado, no probado aquí; ARM64/x86/Windows 10, entorno limpio y despliegue firmado NOT_TESTED. Sin certificación de accesibilidad, multimonitor ni integración de escritorio.
 
 ## Diagnóstico y rendimiento
 

@@ -1,5 +1,15 @@
 # Arquitectura de estabilización · Fase 4
 
+## Actualización Fase 4.1
+
+ADR-012 y `docs/testing/PHASE41_PERFORMANCE.md` amplían el diagnóstico original. ContainerWindow utiliza caption del sistema y NexThemeManager deja los colores nativos a Windows. Container/Dock sustituyen DispatcherQueueTimer por DeferredAction cancelable, con invalidación de callbacks encolados al cerrar. Container retira handlers XAML, Closed, DataContext y Children al cierre; Dock retira su Closed nombrado además de AppWindow/Loaded/XamlRoot y flyouts.
+
+DiagnosticProbe registra GDI/USER, privado/WS, generaciones GC y censo opt-in acotado de tipos de handles. Comprueba destrucción de HWND propios y presupuestos de seguridad. Los componentes se muestrean cada ciclo; perfiles/vacías cada diez, con muestras de reposo. `tools/Invoke-NativeResourceProbe.ps1` añade supervisor externo de su único proceso hijo. Las variantes no cambian el comportamiento normal sin opt-in y datos aislados.
+
+El reproductor `tools/WinUiWindowLifetimeRepro` no referencia ningún módulo de producto. Reproduce incremento Composition/Event con Window sin Content: no permite atribuir ese residual a ViewModels, iconos, SQLite o coordinadores. No se fuerza liberación de recursos XAML sin ownership conocido. La recreación ilimitada sigue sin aprobación de estabilidad; no hay cambio de arquitectura a pooling ni publicación 1.0.
+
+Las secciones siguientes conservan el contexto original de Fase 4; sus hipótesis pendientes se precisan en el informe 4.1, no sustituyen los resultados nuevos.
+
 La dirección de dependencias no cambia: Domain independiente; Application contiene contratos y reglas; Infrastructure implementa SQLite/diagnóstico; Windows adapta Shell y monitores; UI es la raíz de composición; Presentation mantiene MVVM portable. Un único WorkspaceWindowCoordinator posee ventanas flotantes, restauración y cierre. No se crean aplicaciones independientes ni se habilita DESKTOP.
 
 `DockLayoutSignature` limita reconstrucciones a cambios visuales o de referencias, excluyendo geometría y timestamps de contenedores. `NexThemeManager.Apply` evita recorridos repetidos de un tema idéntico, con aplicación forzada para contenido diferido. El registro de temas retira sus callbacks al cerrar la ventana. ContainerWindow/DockWindow desuscriben timers/AppWindow/XamlRoot y liberan contenido, items y backdrop.

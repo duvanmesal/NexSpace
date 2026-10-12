@@ -1,5 +1,7 @@
 # ADR-011 · Estabilización y distribución local
 
+Ampliación 2026-10-12: ADR-012 documenta las correcciones demostradas de caption/GDI y temporizadores, la limpieza de cierre y la reproducción independiente de Composition/Event. Los fallos históricos de esta decisión se conservan; el estado actualizado está en PHASE41_PERFORMANCE.md. Fase 4 continúa abierta y 1.0 bloqueada.
+
 Fecha: 2026-10-12. Estado: implementación de Fase 4, aceptación final pendiente. No reemplaza decisiones aprobadas de FLOATING, perfiles o seguridad.
 
 ## Decisiones
