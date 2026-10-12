@@ -1,5 +1,9 @@
 # Validación de Fase 2 · NexDock + NexManager integrados
 
+## Cierre condicionado · 2026-10-11
+
+El usuario acepta Fase 2 y autoriza Fase 3, sin convertir sus pendientes en PASS. Reverificación previa: restore, Debug/Release x64 (0 advertencias/errores), 24 unitarias y 21 de integración Release PASS. Auditoría de los 24 archivos modificados: sin bases, capturas privadas, generados ni patrones de secretos. Fetch: 0 commits remotos exclusivos y 2 locales. Push normal de e1fc741 y 87716d1 completado; remoto comprobado en 87716d1274c4bb3304cd5b8afd8984cea86a1d07. Sin force ni reescritura. Los párrafos siguientes son evidencia histórica de Fase 2; conservar todos los límites.
+
 Fecha: 2026-10-11. Estado: implementación funcional entregada para revisión; **no aceptación integral**. Fase 1 aceptada condicionalmente por el usuario. FLOATING es la única presentación; DESKTOP experimental/deshabilitado. No se inició Fase 3.
 
 ## Entorno y método

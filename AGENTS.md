@@ -10,7 +10,9 @@ Visual principal: `assets/references/concepts/03_C_sistema_hibrido_APROBADO.png`
 
 ## Alcance y seguridad
 - La **Fase 1 está aceptada con alcance condicionado** (2026-10-11). Conservar pendientes: drag-and-drop físico, accesibilidad, DPI/multimonitor, translucidez, animaciones y perfilado de memoria. No declararlos PASS sin evidencia.
-- La **Fase 2 (NexDock/NexManager integrados) está autorizada**. Compartir servicios, persistencia y ciclo de vida con NexContainers. Crear commits locales de Fase 2, sin push hasta revisión. **No iniciar Fase 3** sin autorización explícita.
+- La **Fase 2 está aceptada condicionalmente** (2026-10-11). Conservar su matriz y pendientes, incluido el fallo nativo de arranque sin causa demostrada.
+- La **Fase 3 está autorizada**: perfiles manuales, temas, evolución de Dock/Manager, bandeja, preferencias de inicio opcionales y migraciones seguras. Compartir servicios y ciclo de vida. Commits de Fase 3 únicamente locales; **no iniciar Fase 4**.
+- Implementación de Fase 3 entregada para revisión el 2026-10-12, sin aceptación integral: consultar PHASE3_VALIDATION.md y PHASE3_PERFORMANCE.md antes de ampliar afirmaciones de compatibilidad o distribuirla.
 - No habilitar inicio con Windows sin autorización adicional. No ejecutar HWND_BOTTOM, reiniciar Explorer, cambiar sus opciones/iconos ni activar Developer Mode.
 - Fase 0 tiene alcance condicionado: FLOATING es la base funcional aprobada; DESKTOP sigue experimental, desacoplado y **deshabilitado**. Todos los contenedores, NexDock y NexManager deben usar FLOATING. No ejecutar integración de escritorio ni habilitarla por defecto.
 - No reemplazar Explorer, modificar claves del sistema o cambiar la visibilidad de iconos sin aprobación explícita.
@@ -29,4 +31,4 @@ Visual principal: `assets/references/concepts/03_C_sistema_hibrido_APROBADO.png`
 - Anotar versiones reales y decisiones nuevas en `docs/decisions/`.
 - No modificar las decisiones aprobadas sin solicitar aprobación.
 - Al cerrar Fase 1, actualizar propuesta, arquitectura, ADR aplicable y matriz de validación. Separar pruebas automatizadas, smoke tests y evidencia manual reportada/pendiente; dar pasos precisos para validación visual.
-- Al terminar Fase 2, resumir evidencia, riesgos y validaciones manuales pendientes; detenerse antes de Fase 3.
+- Al terminar Fase 3, resumir evidencia, migraciones, rendimiento, riesgos y pruebas pendientes; detenerse antes de Fase 4. No habilitar inicio Windows durante pruebas.
