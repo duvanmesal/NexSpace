@@ -60,11 +60,13 @@ internal static class NexThemeManager
         var foreground = Resolve(root, "NexTextBrush");
         StyleTree(root, highContrast, foreground);
         root.DispatcherQueue.TryEnqueue(() => { try { if (Targets.Any(t => t.Root.TryGetTarget(out var live) && ReferenceEquals(live, root))) StyleTree(root, highContrast, foreground); } catch (Exception ex) { new NexSpace.Infrastructure.JsonEventLog().Write("theme-tree-failed", ex.GetType().Name, ex.HResult.ToString("X8")); } });
-        if (window.AppWindow.TitleBar is { } title)
+        // Let Windows own caption colors. Repeated native customization accumulates GDI
+        // resources on the validated runtime; XAML content retains the NexGlass theme.
+        if (DiagnosticProbe.Variant("legacy-titlebar") && !DiagnosticProbe.Variant("no-caption-colors"))
         {
             var caption = light && window is not MainWindow ? Color("#18242E") : Microsoft.UI.Colors.White;
-            title.ButtonForegroundColor = caption;
-            title.ButtonInactiveForegroundColor = caption;
+            window.AppWindow.TitleBar.ButtonForegroundColor = caption;
+            window.AppWindow.TitleBar.ButtonInactiveForegroundColor = caption;
         }
     }
     private static void StyleTree(DependencyObject parent, bool highContrast, Brush foreground)

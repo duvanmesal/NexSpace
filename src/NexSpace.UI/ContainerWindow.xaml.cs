@@ -29,7 +29,7 @@ public sealed partial class ContainerWindow : Window
     private bool _correctingPosition;
     private global::Windows.Graphics.PointInt32 _lockedPosition;
     public event Action? ContainerChanged;
-    private readonly DispatcherQueueTimer _placementSaveTimer;
+    private readonly DeferredAction? _placementSaveTimer;
     private readonly JsonEventLog _log = new();
 
     public ContainerWindow(Guid containerId, ContainerService service, IContainerItemPlatformService platform)
@@ -39,20 +39,54 @@ public sealed partial class ContainerWindow : Window
         _platform = platform;
         _container = service.Get(containerId) ?? throw new InvalidOperationException("El contenedor no existe.");
         ViewModel = new ContainerViewModel(service, platform, containerId, _log);
-        InitializeComponent();
-        if (DiagnosticProbe.IsRequested && Environment.GetEnvironmentVariable("NEXSPACE_PROBE_DISABLE_DROP") == "1") ItemsView.AllowDrop = false;
+        if (DiagnosticProbe.Variant("minimal-tree"))
+        {
+            Root = new Grid();
+            for (var i = 0; i < 4; i++) Root.RowDefinitions.Add(new RowDefinition());
+            DragRegion = new Grid(); Header = new Grid(); ContentArea = new Grid();
+            ItemsView = new ListView(); EmptyState = new StackPanel();
+            TitleText = new TextBlock(); StatusText = new TextBlock();
+            ContainerIcon = new FontIcon(); CollapseIcon = new FontIcon();
+            Content = Root;
+        }
+        else InitializeComponent();
+        if (DiagnosticProbe.Variant("no-xaml-events")) DetachXamlHandlers();
+        if (DiagnosticProbe.Variant("no-bindings")) { TitleText.ClearValue(TextBlock.TextProperty); StatusText.ClearValue(TextBlock.TextProperty); ItemsView.ClearValue(ItemsControl.ItemsSourceProperty); }
+        if (DiagnosticProbe.IsRequested && Environment.GetEnvironmentVariable("NEXSPACE_DATA_DIR") is { } diagnosticDirectory && DiagnosticProbe.IsIsolated(diagnosticDirectory) && Environment.GetEnvironmentVariable("NEXSPACE_PROBE_DISABLE_DROP") == "1") ItemsView.AllowDrop = false;
         Root.DataContext = ViewModel;
-        NexThemeManager.Register(this, Root);
-        _placementSaveTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
-        _placementSaveTimer.Interval = TimeSpan.FromMilliseconds(350);
-        _placementSaveTimer.IsRepeating = false;
-        _placementSaveTimer.Tick += PlacementTimerTick;
+        if (!DiagnosticProbe.Variant("no-theme")) NexThemeManager.Register(this, Root);
+        if (DiagnosticProbe.Variant("no-content")) Content = new Grid();
+        if (DiagnosticProbe.Variant("no-list")) ContentArea.Children.Remove(ItemsView);
+        if (DiagnosticProbe.Variant("no-tooltips"))
+        {
+            ToolTipService.SetToolTip(TitleText, null);
+            foreach (var child in Header.Children.OfType<Button>()) ToolTipService.SetToolTip(child, null);
+        }
+        if (!DiagnosticProbe.Variant("no-timer"))
+        {
+            var queue = DispatcherQueue.GetForCurrentThread();
+            _placementSaveTimer = new DeferredAction(TimeSpan.FromMilliseconds(350), action => queue.TryEnqueue(() => action()),
+                PersistCurrentPlacement, ex => StartupDiagnostics.Record(_log, "placement-debounce-failed", ex));
+        }
         Title = _container.Name;
 
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(DragRegion);
-        AppWindow.TitleBar.ButtonForegroundColor = Microsoft.UI.Colors.White;
-        AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+        // Native caption customization reproducibly accumulates GDI objects on the tested SDK.
+        // Keep OS-owned move/resize/close chrome; legacy path is isolated diagnosis only.
+        if (DiagnosticProbe.Variant("legacy-titlebar") && !DiagnosticProbe.Variant("no-titlebar"))
+        {
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(DragRegion);
+            if (!DiagnosticProbe.Variant("no-caption-colors"))
+            {
+                AppWindow.TitleBar.ButtonForegroundColor = Microsoft.UI.Colors.White;
+                AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+            }
+        }
+        else
+        {
+            Root.RowDefinitions[0].Height = new GridLength(0);
+            DragRegion.Visibility = Visibility.Collapsed;
+        }
         var displays = new WindowsDisplayService().GetDisplays();
         var display = displays.FirstOrDefault(candidate => candidate.Key == _container.Placement.MonitorKey) ?? displays.FirstOrDefault(candidate => candidate.IsPrimary) ?? displays.FirstOrDefault();
         if (display is not null)
@@ -66,18 +100,40 @@ public sealed partial class ContainerWindow : Window
         _lockedPosition = AppWindow.Position;
         RefreshItems();
         AppWindow.Closing += WindowClosing;
-        AppWindow.Changed += WindowChanged;
-        Closed += (_, _) => { _closed = true; _placementSaveTimer.Stop(); _placementSaveTimer.Tick -= PlacementTimerTick; AppWindow.Closing -= WindowClosing; AppWindow.Changed -= WindowChanged; ContainerChanged = null; ItemsView.ItemsSource = null; SystemBackdrop = null; Content = null; };
+        if (!DiagnosticProbe.Variant("no-events")) AppWindow.Changed += WindowChanged;
+        Closed += WindowClosed;
         if (new global::Windows.UI.ViewManagement.UISettings().AnimationsEnabled)
             ContentArea.Transitions = new TransitionCollection { new EntranceThemeTransition() };
     }
-    private void PlacementTimerTick(DispatcherQueueTimer sender, object args) => PersistCurrentPlacement();
+    private void WindowClosed(object sender, WindowEventArgs args)
+    {
+        _closed = true; _placementSaveTimer?.Dispose();
+        AppWindow.Closing -= WindowClosing; AppWindow.Changed -= WindowChanged;
+        ContainerChanged = null; ItemsView.ItemsSource = null; SystemBackdrop = null; Content = null;
+        if (!DiagnosticProbe.Variant("legacy-closed-cleanup"))
+        {
+            Closed -= WindowClosed;
+            DetachXamlHandlers(); Root.DataContext = null; Root.Children.Clear();
+        }
+    }
+    private void DetachXamlHandlers()
+    {
+        foreach (var button in Header.Children.OfType<Button>())
+        {
+            button.Click -= Add_Click; button.Click -= View_Click;
+            button.Click -= Collapse_Click; button.Click -= Options_Click;
+        }
+        ItemsView.DragOver -= Items_DragOver; ItemsView.Drop -= Items_Drop;
+        ItemsView.RightTapped -= Items_RightTapped; ItemsView.DoubleTapped -= Items_DoubleTapped;
+        ItemsView.KeyDown -= Items_KeyDown;
+    }
     private void WindowClosing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
     {
         FlushPlacement();
+        if (DiagnosticProbe.Variant("detach-on-close")) { DetachXamlHandlers(); Root.DataContext = null; Root.Children.Clear(); }
         _closed = true;
-        _placementSaveTimer.Stop();
-        SetTitleBar(null);
+        _placementSaveTimer?.Stop();
+        if (DiagnosticProbe.Variant("legacy-titlebar") && !DiagnosticProbe.Variant("no-titlebar-reset")) SetTitleBar(null);
         ItemsView.AllowDrop = false;
         ItemsView.ItemsSource = null;
         SystemBackdrop = null;
@@ -93,7 +149,7 @@ public sealed partial class ContainerWindow : Window
                 try { _correctingPosition = true; AppWindow.Move(_lockedPosition); }
                 finally { _correctingPosition = false; }
             }
-            _placementSaveTimer.Stop(); _placementSaveTimer.Start();
+            _placementSaveTimer?.Stop(); _placementSaveTimer?.Start();
     }
 
     public void RefreshFromRepository() => RefreshItems();
@@ -123,7 +179,7 @@ public sealed partial class ContainerWindow : Window
         _refreshing = true;
         try
         {
-            if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+            if (!DiagnosticProbe.Variant("no-minimum") && AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
             {
                 presenter.PreferredMinimumWidth = ContainerGeometry.MinimumWidth;
                 presenter.PreferredMinimumHeight = _container.IsCollapsed ? ContainerGeometry.CollapsedHeight : ContainerGeometry.MinimumExpandedHeight;
@@ -310,7 +366,7 @@ public sealed partial class ContainerWindow : Window
         RefreshItems();
     }
 
-    public void FlushPlacement() { _placementSaveTimer.Stop(); PersistCurrentPlacement(); }
+    public void FlushPlacement() { _placementSaveTimer?.Stop(); PersistCurrentPlacement(); }
 
     private void PersistCurrentPlacement()
     {

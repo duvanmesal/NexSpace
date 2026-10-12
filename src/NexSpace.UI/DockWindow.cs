@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Dispatching;
 using NexSpace.Application;
+using NexSpace.Infrastructure;
 using NexSpace.Domain;
 using NexSpace.Presentation;
 using NexSpace.Windows;
@@ -20,7 +21,7 @@ internal sealed class DockWindow : Window
     private readonly Action _recover;
     private readonly Grid _root = new() { BorderThickness = new Thickness(1), RowDefinitions = { new() { Height = new GridLength(16) }, new() } };
     private readonly StackPanel _buttons = new() { Spacing = 8, Margin = new Thickness(12, 2, 12, 8) };
-    private readonly DispatcherQueueTimer _saveTimer;
+    private readonly DeferredAction _saveTimer;
     private readonly List<Flyout> _flyouts = [];
     private readonly TextBlock _gripTitle = new() { Text = "NexDock", FontSize = 11, Margin = new Thickness(14, 6, 0, 0) };
     private bool _placing;
@@ -40,16 +41,23 @@ internal sealed class DockWindow : Window
         AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
         if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter) { presenter.IsMaximizable = false; presenter.IsResizable = false; presenter.SetBorderAndTitleBar(false, false); }
         NexThemeManager.Register(this, _root);
-        _saveTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
-        _saveTimer.IsRepeating = false; _saveTimer.Interval = TimeSpan.FromMilliseconds(450);
-        _saveTimer.Tick += SaveTimerTick;
+        var queue = DispatcherQueue.GetForCurrentThread();
+        _saveTimer = new DeferredAction(TimeSpan.FromMilliseconds(450), action => queue.TryEnqueue(() => action()),
+            SaveFreePosition, ex => StartupDiagnostics.Record(new NexSpace.Infrastructure.JsonEventLog(), "dock-debounce-failed", ex));
         AppWindow.Changed += WindowChanged;
         _root.Loaded += RootLoaded;
         AppWindow.Closing += WindowClosing;
-        Closed += (_, _) => { _closed = true; _saveTimer.Stop(); _saveTimer.Tick -= SaveTimerTick; AppWindow.Changed -= WindowChanged; AppWindow.Closing -= WindowClosing; _root.Loaded -= RootLoaded; if (_root.XamlRoot is { } xaml) xaml.Changed -= RootChanged; ClearButtons(); SystemBackdrop = null; Content = null; };
+        Closed += WindowClosed;
         Refresh();
     }
-    private void SaveTimerTick(DispatcherQueueTimer sender, object args) => SaveFreePosition();
+    private void WindowClosed(object sender, WindowEventArgs args)
+    {
+        Closed -= WindowClosed;
+        _closed = true; _saveTimer.Dispose();
+        AppWindow.Changed -= WindowChanged; AppWindow.Closing -= WindowClosing; _root.Loaded -= RootLoaded;
+        if (_root.XamlRoot is { } xaml) xaml.Changed -= RootChanged;
+        ClearButtons(); SystemBackdrop = null; Content = null;
+    }
     private void WindowClosing(Microsoft.UI.Windowing.AppWindow sender, Microsoft.UI.Windowing.AppWindowClosingEventArgs args)
     {
         FlushPlacement();

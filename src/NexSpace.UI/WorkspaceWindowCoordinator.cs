@@ -1,4 +1,5 @@
 using NexSpace.Application;
+using Microsoft.UI.Xaml;
 using NexSpace.Domain;
 using NexSpace.Presentation;
 using NexSpace.Windows;
@@ -13,6 +14,9 @@ internal sealed class WorkspaceWindowCoordinator(WorkspaceService workspace, Con
     private DockWindow? _dock;
     private bool _closing;
     public bool HasDock => _dock is not null;
+    internal nint[] DiagnosticOwnedHandles() => _containers.Values.Cast<Window>()
+        .Concat(_dock is null ? [] : new Window[] { _dock })
+        .Select(WinRT.Interop.WindowNative.GetWindowHandle).ToArray();
     internal int OpenContainerCount => _containers.Count;
     public void SaveCurrentSession() { foreach (var w in _containers.Values.ToArray()) w.FlushPlacement(); _dock?.FlushPlacement(); SaveSession(); }
     public void ToggleDock() { if (_dock is null) OpenDock(); else _dock.Close(); }
