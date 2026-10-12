@@ -53,6 +53,7 @@ internal static class NexThemeManager
         var highContrast = new global::Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
         var preset = Current.Preset;
         var accentKey = Current.Accent;
+        string? liveAccentHex = null;
         if (preset == ThemePreset.Auto)
         {
             // Capability/preference detection, not an OS-version guess: read the live system
@@ -60,14 +61,16 @@ internal static class NexThemeManager
             var bg = SystemSettings.GetColorValue(global::Windows.UI.ViewManagement.UIColorType.Background);
             var sysAccent = SystemSettings.GetColorValue(global::Windows.UI.ViewManagement.UIColorType.Accent);
             preset = AutoThemeResolver.ResolveBaseline(AutoThemeResolver.IsLightBackground(bg.R, bg.G, bg.B));
-            accentKey = AutoThemeResolver.ResolveNearestAccent(sysAccent.R, sysAccent.G, sysAccent.B);
+            // Use Windows' real accent RGB, hue-preserving but contrast-corrected (WCAG AA 4.5:1)
+            // against the resolved surface — not snapped to a fixed named palette.
+            liveAccentHex = AccentPalette.DeriveAccentHex(sysAccent.R, sysAccent.G, sysAccent.B, forLightSurface: preset == ThemePreset.Light);
         }
         var light = preset == ThemePreset.Light;
         var contrast = preset == ThemePreset.Contrast;
         var background = light ? "#F2F5F7" : contrast ? "#000000" : preset == ThemePreset.Minimal ? "#151719" : "#22272E";
         var text = light ? "#18242E" : "#F2F5F7";
         var secondary = light ? "#394C5B" : contrast ? "#FFFFFF" : "#C2CAD2";
-        var accent = contrast ? "#FFFF64" : accentKey switch { "copper" => light ? "#884326" : "#DEA78E", "blue-hour" => light ? "#185F99" : "#91BFE3", _ => light ? "#206856" : "#92CDBB" };
+        var accent = contrast ? "#FFFF64" : liveAccentHex ?? accentKey switch { "copper" => light ? "#884326" : "#DEA78E", "blue-hour" => light ? "#185F99" : "#91BFE3", _ => light ? "#206856" : "#92CDBB" };
         if (!highContrast)
         {
             Set(root, "NexSolidSurfaceBrush", background); Set(root, "NexTextBrush", text); Set(root, "NexSecondaryTextBrush", secondary);
