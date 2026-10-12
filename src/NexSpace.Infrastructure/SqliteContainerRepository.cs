@@ -191,8 +191,14 @@ public sealed class SqliteContainerRepository(string databasePath) : IContainerR
         using var version = connection.CreateCommand();
         version.CommandText = "PRAGMA user_version";
         var current = Convert.ToInt32(version.ExecuteScalar());
-        if (current > 2) throw new InvalidOperationException("Database schema is newer than this application.");
-        if (current == 2) return;
+        if (current > 3) throw new InvalidOperationException("Database schema is newer than this application.");
+        if (current == 3) return;
+        if (current > 0)
+        {
+            var backupPath = connection.DataSource + ".pre-v3-" + Guid.NewGuid().ToString("N") + ".bak";
+            using var backup = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = backupPath, Pooling = false }.ToString());
+            backup.Open(); connection.BackupDatabase(backup);
+        }
         using var transaction = connection.BeginTransaction();
         using var schema = connection.CreateCommand();
         schema.Transaction = transaction;
@@ -202,14 +208,18 @@ public sealed class SqliteContainerRepository(string databasePath) : IContainerR
             CREATE TABLE container_items(container_id TEXT NOT NULL REFERENCES containers(id) ON DELETE CASCADE,item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,sort_order INTEGER NOT NULL,display_name TEXT NOT NULL,PRIMARY KEY(container_id,item_id));
             CREATE INDEX ix_container_items_order ON container_items(container_id,sort_order);
             """ : "") + """
-            CREATE TABLE workspace_state(id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, definition TEXT NOT NULL);
-            PRAGMA user_version=2;
+            CREATE TABLE IF NOT EXISTS workspace_state(id INTEGER PRIMARY KEY CHECK(id=1), revision INTEGER NOT NULL, definition TEXT NOT NULL);
+            CREATE TABLE IF NOT EXISTS profiles(id TEXT PRIMARY KEY, name TEXT NOT NULL COLLATE NOCASE UNIQUE, snapshot TEXT NULL);
+            CREATE TABLE IF NOT EXISTS profile_state(id INTEGER PRIMARY KEY CHECK(id=1), active_id TEXT NOT NULL REFERENCES profiles(id), default_id TEXT NOT NULL REFERENCES profiles(id), restore_last INTEGER NOT NULL);
+            INSERT OR IGNORE INTO profiles(id,name) VALUES('00000000-0000-0000-0000-000000000001','Principal');
+            INSERT OR IGNORE INTO profile_state VALUES(1,'00000000-0000-0000-0000-000000000001','00000000-0000-0000-0000-000000000001',1);
+            PRAGMA user_version=3;
             """;
         schema.ExecuteNonQuery();
         transaction.Commit();
     }
 
-    private static NexContainer? Load(SqliteConnection connection, Guid id)
+    internal static NexContainer? Load(SqliteConnection connection, Guid id)
     {
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT name,sort_order,is_collapsed,is_position_locked,view_mode,accent_key,monitor_key,x,y,width,height,created_utc,updated_utc FROM containers WHERE id=$id";
@@ -229,7 +239,7 @@ public sealed class SqliteContainerRepository(string databasePath) : IContainerR
         return container with { Items = references };
     }
 
-    private static void BindContainer(SqliteCommand command, NexContainer c)
+    internal static void BindContainer(SqliteCommand command, NexContainer c)
     {
         command.Parameters.AddWithValue("$id", c.Id.ToString("D")); command.Parameters.AddWithValue("$name", c.Name); command.Parameters.AddWithValue("$sort", c.SortOrder);
         command.Parameters.AddWithValue("$collapsed", c.IsCollapsed ? 1 : 0); command.Parameters.AddWithValue("$locked", c.IsPositionLocked ? 1 : 0);

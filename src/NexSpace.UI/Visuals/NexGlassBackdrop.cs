@@ -17,12 +17,12 @@ internal sealed class NexGlassBackdrop(Grid surface) : SystemBackdrop
         try
         {
             var resources = Microsoft.UI.Xaml.Application.Current.Resources;
-            var solid = ((SolidColorBrush)resources["NexSolidSurfaceBrush"]).Color;
+            var solid = ((SolidColorBrush)(surface.Resources.TryGetValue("NexSolidSurfaceBrush", out var local) ? local : resources["NexSolidSurfaceBrush"])).Color;
             _controller = new DesktopAcrylicController
             {
                 Kind = DesktopAcrylicKind.Thin,
                 TintColor = solid,
-                TintOpacity = (float)(double)resources["NexGlassTintOpacity"],
+                TintOpacity = (float)NexThemeManager.Current.Opacity,
                 LuminosityOpacity = (float)(double)resources["NexGlassLuminosityOpacity"],
                 FallbackColor = solid
             };

@@ -8,10 +8,13 @@ public static class DockPlacementPolicy
     public static WindowPlacement Place(DockSettings settings, DisplayInfo display, int categoryCount)
     {
         var scale = Math.Max(1, display.Dpi) / 96d;
-        var vertical = settings.Edge is DockEdge.Left or DockEdge.Right;
-        var length = Math.Clamp(categoryCount + 2, 3, 12) * (Math.Clamp(settings.ItemSize, 32, 64) + 36) + 32;
-        var width = Math.Min(display.WorkWidth, (int)Math.Round((vertical ? 180 : length) * scale));
-        var height = Math.Min(display.WorkHeight, (int)Math.Round((vertical ? length : 118) * scale));
+        var vertical = IsVertical(settings);
+        var size = Math.Clamp(settings.ItemSize, 32, 64);
+        var cell = (vertical ? settings.ShowLabels ? 76 : 56 : settings.ShowLabels ? Math.Max(size + 28, 92) : size + 28) + Math.Clamp(settings.Spacing, 4, 20);
+        var length = Math.Clamp(categoryCount + 3, 4, 12) * cell + 24;
+        var cross = settings.ShowLabels ? size + 58 : size + 36;
+        var width = Math.Min(display.WorkWidth, (int)Math.Round((vertical ? Math.Max(cross, 112) : length) * scale));
+        var height = Math.Min(display.WorkHeight, (int)Math.Round((vertical ? length + 20 : cross) * scale));
         var margin = (int)Math.Round(12 * scale);
         var x = display.WorkX + (int)Math.Round(settings.X * scale);
         var y = display.WorkY + (int)Math.Round(settings.Y * scale);
@@ -22,4 +25,5 @@ public static class DockPlacementPolicy
         }
         return PlacementPolicy.KeepFullyVisible(new(display.Key, x, y, width, height), display);
     }
+    public static bool IsVertical(DockSettings settings) => settings.Orientation == DockOrientation.Vertical || (settings.Orientation == DockOrientation.Automatic && settings.Edge is DockEdge.Left or DockEdge.Right);
 }

@@ -27,6 +27,7 @@ public sealed partial class MainPage : Page
         var directory = Environment.GetEnvironmentVariable("NEXSPACE_DATA_DIR");
         _dataDirectory = Path.GetFullPath(string.IsNullOrWhiteSpace(directory) ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NexSpace", "data") : directory);
         var database = Path.Combine(_dataDirectory, "nexspace.db");
+        Profiles = new ProfilesViewModel(new ProfileService(new SqliteProfileRepository(database)));
         var containers = new ContainerService(new SqliteContainerRepository(database));
         _workspace = new WorkspaceService(new SqliteWorkspaceRepository(database), containers, _log);
         ViewModel = new WorkspaceViewModel(_workspace, containers, _platform);
@@ -43,14 +44,14 @@ public sealed partial class MainPage : Page
             if (_started) return;
             _started = true;
             _log.Write("manager-loaded", "Reloading workspace");
-            try { await Task.Run(() => { _workspace.Load(); containers.GetAll(); }); }
+            try { await Task.Run(() => { _workspace.Load(); containers.GetAll(); var state = new SqliteProfileRepository(database).Load(); if (!state.RestoreLast && state.ActiveId != state.DefaultId) new SqliteProfileRepository(database).Switch(state.DefaultId); }); }
             catch (Exception ex) { ViewModel.Report("No se pudo leer el almacenamiento local."); _log.Write("workspace-startup-failed", "No data reset", ex.GetType().Name); return; }
             _log.Write("manager-storage-ready", "Storage initialized off UI thread");
             if (_shuttingDown) return;
             if (!ViewModel.Reload()) return;
             var startup = ViewModel.Snapshot;
             _log.Write("manager-workspace-loaded", "Loading settings controls");
-            LoadSettings(); UpdateDiagnostic();
+            Profiles.Reload(); LoadProfiles(); LoadSettings(); LoadAppearance(); UpdateDiagnostic();
             _log.Write("manager-settings-loaded", "Starting floating session");
             _windows.StartSession(startup);
             if (!startup.Session.ShowManagerOnStartup && _windows.HasDock) App.MainWindow?.AppWindow.Hide();
@@ -59,17 +60,17 @@ public sealed partial class MainPage : Page
     private void WorkspaceChanged()
     {
         if (_shuttingDown || _refreshing) return;
-        try { _refreshing = true; var id = _selectedCategory; ViewModel.Reload(); CategoriesList.SelectedItem = ViewModel.Categories.FirstOrDefault(c => c.Id == id); _selectedCategory = id; RefreshCategory(); _windows.Refresh(); }
+        try { _refreshing = true; var id = _selectedCategory; ViewModel.Reload(); CategoriesList.SelectedItem = ViewModel.Categories.FirstOrDefault(c => c.Id == id); _selectedCategory = id; RefreshCategory(); _windows.Refresh(); Visuals.NexThemeManager.Apply(ViewModel.Snapshot.Theme); }
         finally { _refreshing = false; }
     }
     private void ShowManager(Guid? categoryId)
     {
         App.MainWindow?.Activate();
         if (categoryId is null) return;
-        ManagerSections.SelectedIndex = 1;
+        SelectSection("Dock");
         CategoriesList.SelectedItem = ViewModel.Categories.FirstOrDefault(c => c.Id == categoryId);
     }
-    public void Shutdown() { if (_shuttingDown) return; _shuttingDown = true; _workspace.Changed -= WorkspaceChanged; _windows.Shutdown(); }
+    public void Shutdown() { if (_shuttingDown) return; _shuttingDown = true; _tray?.Dispose(); _tray = null; _workspace.Changed -= WorkspaceChanged; _windows.Shutdown(); }
     public void RefreshRecoveryStatus() => UpdateDiagnostic();
     public void StartControlledRecoveryProbe() => _log.Write("desktop-probe-disabled", "Desktop integration is disabled in Phase 2.");
     public void EmergencyRestore(string reason) { _windows.Recover(); ViewModel.Report("Recuperación FLOATING solicitada; revisa las ventanas y el diagnóstico."); _log.Write("floating-emergency-restore", reason); }
@@ -165,14 +166,15 @@ public sealed partial class MainPage : Page
         XBox.Value = state.Dock.X; YBox.Value = state.Dock.Y; SizeBox.Value = state.Dock.ItemSize;
         AccentBox.SelectedIndex = state.Dock.AccentKey switch { "blue-hour" => 1, "copper" => 2, _ => 0 };
         StartupDockBox.IsChecked = state.Dock.ShowOnStartup; RestoreBox.IsChecked = state.Session.RestoreContainers; StartupManagerBox.IsChecked = state.Session.ShowManagerOnStartup;
+        OrientationBox.SelectedIndex = (int)state.Dock.Orientation; DockLabelsBox.IsChecked = state.Dock.ShowLabels; DockSpacingBox.Value = state.Dock.Spacing;
     }
     private void SaveSettings_Click(object sender, RoutedEventArgs e)
     {
         if (!double.IsFinite(XBox.Value) || !double.IsFinite(YBox.Value) || !double.IsFinite(SizeBox.Value)) { ViewModel.Report("Completa coordenadas y tamaño."); return; }
         if (StartupDockBox.IsChecked != true && StartupManagerBox.IsChecked != true) { ViewModel.Report("Mantén NexManager o NexDock visible al iniciar."); return; }
-        Report(_workspace.Change(w => w with { Dock = new((DockEdge)Math.Max(0, EdgeBox.SelectedIndex), (MonitorBox.SelectedItem as DisplayInfo)?.Key ?? "", XBox.Value, YBox.Value, (int)SizeBox.Value, new[] { "sea-glass", "blue-hour", "copper" }[Math.Clamp(AccentBox.SelectedIndex, 0, 2)], StartupDockBox.IsChecked == true), Session = w.Session with { RestoreContainers = RestoreBox.IsChecked == true, ShowManagerOnStartup = StartupManagerBox.IsChecked == true } }));
+        Report(_workspace.Change(w => w with { Dock = new((DockEdge)Math.Max(0, EdgeBox.SelectedIndex), (MonitorBox.SelectedItem as DisplayInfo)?.Key ?? "", XBox.Value, YBox.Value, (int)SizeBox.Value, new[] { "sea-glass", "blue-hour", "copper" }[Math.Clamp(AccentBox.SelectedIndex, 0, 2)], StartupDockBox.IsChecked == true) { Orientation = (DockOrientation)Math.Max(0, OrientationBox.SelectedIndex), ShowLabels = DockLabelsBox.IsChecked == true, Spacing = double.IsFinite(DockSpacingBox.Value) ? (int)DockSpacingBox.Value : 8 }, Session = w.Session with { RestoreContainers = RestoreBox.IsChecked == true, ShowManagerOnStartup = StartupManagerBox.IsChecked == true } }));
     }
-    private void UpdateDiagnostic() => DiagnosticText.Text = $"Base: {Path.Combine(_dataDirectory, "nexspace.db")}\nEsquema v2 (migración no destructiva v1)\nProceso: {Environment.ProcessId}\n{App.MainWindow?.EmergencyHotkeyStatus ?? "Atajo pendiente"}\nInicio con Windows: no registrado\nDESKTOP: experimental/deshabilitado\nRegistros: {Path.Combine(Path.GetDirectoryName(_dataDirectory)!, "logs")}";
+    private void UpdateDiagnostic() => DiagnosticText.Text = $"Base: {Path.Combine(_dataDirectory, "nexspace.db")}\nEsquema v3 · perfiles transaccionales · backups sin sobreescritura\nProceso: {Environment.ProcessId}\n{App.MainWindow?.EmergencyHotkeyStatus ?? "Atajo pendiente"}\nDESKTOP: experimental/deshabilitado\nRegistros: {Path.Combine(Path.GetDirectoryName(_dataDirectory)!, "logs")}";
     private void Diagnostics_Click(object sender, RoutedEventArgs e) => UpdateDiagnostic();
     private void Logs_Click(object sender, RoutedEventArgs e)
     {

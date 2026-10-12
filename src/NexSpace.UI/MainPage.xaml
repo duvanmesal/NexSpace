@@ -1,21 +1,37 @@
 <Page x:Class="NexSpace.UI.MainPage" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
- <Grid RequestedTheme="Dark" Background="{ThemeResource NexSolidSurfaceBrush}" RowDefinitions="Auto,*,Auto">
+ <Grid x:Name="ManagerRoot" Background="{ThemeResource NexSolidSurfaceBrush}" RowDefinitions="Auto,*,Auto">
   <Border Padding="24,16" BorderBrush="{ThemeResource NexDividerBrush}" BorderThickness="0,0,0,1">
    <Grid ColumnDefinitions="*,Auto">
     <StackPanel Spacing="4"><TextBlock Text="NexManager" FontSize="26" FontWeight="SemiBold"/><TextBlock Text="Una biblioteca. Tus originales permanecen intactos." Foreground="{ThemeResource NexSecondaryTextBrush}"/></StackPanel>
     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Button Content="Mostrar dock" Click="Dock_Click"/><Button Content="Recuperar ventanas" Click="Recover_Click"/><Button Content="Salir" Click="Exit_Click"/></StackPanel>
    </Grid>
   </Border>
-  <Pivot x:Name="ManagerSections" Grid.Row="1" Margin="16,4">
-   <PivotItem Header="Contenedores">
+  <NavigationView x:Name="ManagerNav" Grid.Row="1" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" PaneDisplayMode="Left" OpenPaneLength="210" SelectionChanged="Navigation_Changed">
+   <NavigationView.MenuItems>
+    <NavigationViewItem Content="Inicio" Tag="Home" Icon="Home" IsSelected="True"/>
+    <NavigationViewItem Content="Contenedores" Tag="Containers" Icon="Library"/>
+    <NavigationViewItem Content="Dock y categorías" Tag="Dock" Icon="AllApps"/>
+    <NavigationViewItem Content="Espacios de trabajo" Tag="Profiles" Icon="People"/>
+    <NavigationViewItem Content="Apariencia" Tag="Appearance" Icon="Highlight"/>
+    <NavigationViewItem Content="Preferencias" Tag="Preferences" Icon="Setting"/>
+    <NavigationViewItem Content="Diagnóstico" Tag="Diagnostics" Icon="Help"/>
+   </NavigationView.MenuItems>
+   <Grid Margin="24,12">
+   <ScrollViewer x:Name="HomeSection"><StackPanel Spacing="20" MaxWidth="720" HorizontalAlignment="Left">
+    <TextBlock Text="Tu escritorio, a tu ritmo." FontSize="32" FontWeight="SemiBold"/>
+    <TextBlock Text="Organiza referencias en espacios independientes. Los archivos originales siempre permanecen en su ubicación." TextWrapping="Wrap" Foreground="{ThemeResource NexSecondaryTextBrush}" FontSize="16"/>
+    <Border Style="{StaticResource NexLibrarySurfaceStyle}" Padding="24"><StackPanel Spacing="12"><TextBlock x:Name="ActiveProfileText" Text="Cargando espacio…" FontSize="22"/><TextBlock Text="{Binding Status}"/><StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Nuevo contenedor" Click="Create_Click"/><Button Content="Mostrar dock" Click="Dock_Click"/></StackPanel></StackPanel></Border>
+    <TextBlock Text="Acceso seguro" Style="{StaticResource NexTitleStyle}"/><TextBlock Text="Ctrl + Alt + Shift + F12 recupera tus ventanas desde cualquier aplicación. FLOATING activo; DESKTOP deshabilitado." TextWrapping="Wrap"/>
+   </StackPanel></ScrollViewer>
+   <Grid x:Name="ContainersSection" Visibility="Collapsed">
     <Grid RowDefinitions="Auto,*" RowSpacing="16" Margin="8,12">
      <StackPanel Orientation="Horizontal" Spacing="10"><Button Content="Nuevo contenedor" Click="Create_Click"/><Button Content="Actualizar" Click="Refresh_Click"/><TextBlock Text="Abre un contenedor para editarlo." VerticalAlignment="Center" Foreground="{ThemeResource NexSecondaryTextBrush}"/></StackPanel>
      <ListView Grid.Row="1" x:Name="ContainersList" ItemsSource="{Binding Containers}" IsItemClickEnabled="True" ItemClick="Container_ItemClick" RightTapped="Container_RightTapped" SelectionMode="Single" HorizontalContentAlignment="Stretch">
       <ListView.ItemTemplate><DataTemplate><Border Style="{StaticResource NexLibrarySurfaceStyle}" Padding="16,12"><Grid ColumnDefinitions="*,Auto"><StackPanel Spacing="4"><TextBlock Text="{Binding Name}" Style="{StaticResource NexTitleStyle}"/><StackPanel Orientation="Horizontal" Spacing="8"><TextBlock Text="{Binding Items.Count}"/><TextBlock Text="referencias · FLOATING" Foreground="{ThemeResource NexSecondaryTextBrush}"/></StackPanel></StackPanel><TextBlock Grid.Column="1" Text="Abrir" Foreground="{ThemeResource NexSeaBrush}" VerticalAlignment="Center"/></Grid></Border></DataTemplate></ListView.ItemTemplate>
      </ListView>
     </Grid>
-   </PivotItem>
-   <PivotItem Header="Dock y categorías">
+   </Grid>
+   <Grid x:Name="DockSection" Visibility="Collapsed">
     <Grid ColumnDefinitions="280,*" ColumnSpacing="20" Margin="8,12">
      <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
       <Button Content="Nueva categoría" Click="CreateCategory_Click"/>
@@ -29,31 +45,57 @@
       <TextBlock Grid.Row="3" Text="Clic para abrir con Windows. Clic derecho: nombre, orden y quitar referencia." TextWrapping="Wrap" Foreground="{ThemeResource NexSecondaryTextBrush}"/>
      </Grid>
     </Grid>
-   </PivotItem>
-   <PivotItem Header="Preferencias">
+   </Grid>
+   <ScrollViewer x:Name="ProfilesSection" Visibility="Collapsed"><StackPanel Spacing="16" MaxWidth="680" HorizontalAlignment="Left">
+    <TextBlock Text="Espacios de trabajo" FontSize="26" FontWeight="SemiBold"/>
+    <TextBlock Text="Cada espacio conserva contenedores, referencias, dock y apariencia. Los cambios se guardan inmediatamente; cambiar de espacio no cierra otras aplicaciones." TextWrapping="Wrap"/>
+    <ListView x:Name="ProfilesList" DisplayMemberPath="Name" MinWidth="400" MaxHeight="280"/>
+    <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Crear" Click="CreateProfile_Click"/><Button Content="Duplicar activo" Click="DuplicateProfile_Click"/><Button Content="Renombrar" Click="RenameProfile_Click"/></StackPanel>
+    <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Cambiar al seleccionado" Click="SwitchProfile_Click"/><Button Content="Eliminar…" Click="DeleteProfile_Click"/></StackPanel>
+    <CheckBox x:Name="RestoreLastProfileBox" Content="Restaurar último espacio al iniciar"/>
+    <Button Content="Usar seleccionado como predeterminado y guardar" Click="DefaultProfile_Click"/>
+    <TextBlock x:Name="ProfileStateText" TextWrapping="Wrap" Foreground="{ThemeResource NexSecondaryTextBrush}"/>
+   </StackPanel></ScrollViewer>
+   <ScrollViewer x:Name="AppearanceSection" Visibility="Collapsed"><StackPanel Spacing="16" MaxWidth="660" HorizontalAlignment="Left">
+    <TextBlock Text="NexGlass · Apariencia" FontSize="26" FontWeight="SemiBold"/>
+    <ComboBox x:Name="ThemeBox" Header="Tema del espacio" MinWidth="320"/>
+    <ComboBox x:Name="ThemeAccentBox" Header="Paleta de acento" MinWidth="320"/>
+    <ComboBox x:Name="FontBox" Header="Tipografía" MinWidth="320"/>
+    <NumberBox x:Name="OpacityBox" Header="Densidad del material (0.65–1)" Minimum="0.65" Maximum="1" SmallChange="0.05" SpinButtonPlacementMode="Inline"/>
+    <NumberBox x:Name="RadiusBox" Header="Radio de esquinas (0–24)" Minimum="0" Maximum="24" SpinButtonPlacementMode="Inline"/>
+    <NumberBox x:Name="ThemeSpacingBox" Header="Espaciado (4–20)" Minimum="4" Maximum="20" SpinButtonPlacementMode="Inline"/>
+    <CheckBox x:Name="MaterialBox" Content="Solicitar Acrylic compatible (alternativa sólida automática)"/>
+    <Button Content="Aplicar a ventanas abiertas" Click="ApplyTheme_Click"/>
+    <TextBlock Text="La opacidad controla el tinte del material, no vuelve transparente el texto. Contraste usa una paleta sólida; alto contraste y movimiento reducido de Windows tienen prioridad." TextWrapping="Wrap" Foreground="{ThemeResource NexSecondaryTextBrush}"/>
+   </StackPanel></ScrollViewer>
+   <Grid x:Name="PreferencesSection" Visibility="Collapsed">
     <ScrollViewer><StackPanel Margin="8,12" Spacing="16" MaxWidth="660" HorizontalAlignment="Left">
      <TextBlock Text="Posición y apariencia del dock" Style="{StaticResource NexTitleStyle}"/>
      <Grid ColumnDefinitions="*,*" ColumnSpacing="16"><ComboBox x:Name="EdgeBox" Header="Anclaje" HorizontalAlignment="Stretch"/><ComboBox Grid.Column="1" x:Name="MonitorBox" Header="Monitor" DisplayMemberPath="Name" HorizontalAlignment="Stretch"/></Grid>
      <Grid ColumnDefinitions="*,*" ColumnSpacing="16"><NumberBox x:Name="XBox" Header="X libre (DIP)" Minimum="-100000" Maximum="100000"/><NumberBox Grid.Column="1" x:Name="YBox" Header="Y libre (DIP)" Minimum="-100000" Maximum="100000"/></Grid>
      <Grid ColumnDefinitions="*,*" ColumnSpacing="16"><NumberBox x:Name="SizeBox" Header="Tamaño del acceso (32–64 DIP)" Minimum="32" Maximum="64"/><ComboBox Grid.Column="1" x:Name="AccentBox" Header="Acento NexGlass" HorizontalAlignment="Stretch"/></Grid>
+     <ComboBox x:Name="OrientationBox" Header="Orientación"/><NumberBox x:Name="DockSpacingBox" Header="Espaciado del dock (4–20 DIP)" Minimum="4" Maximum="20"/><CheckBox x:Name="DockLabelsBox" Content="Mostrar etiquetas del dock"/>
      <TextBlock Text="Al iniciar NexSpace" Style="{StaticResource NexTitleStyle}"/>
      <CheckBox x:Name="StartupDockBox" Content="Mostrar NexDock"/><CheckBox x:Name="RestoreBox" Content="Restaurar contenedores abiertos"/><CheckBox x:Name="StartupManagerBox" Content="Mostrar NexManager"/>
      <Button Content="Guardar preferencias" Click="SaveSettings_Click" HorizontalAlignment="Left"/>
-     <InfoBar IsOpen="True" IsClosable="False" Severity="Informational" Title="Inicio con Windows deshabilitado" Message="No se registra autoarranque. Estas opciones solo se aplican al abrir NexSpace."/>
+     <TextBlock x:Name="WindowsStartupText" Text="Inicio Windows: desactivado por defecto" TextWrapping="Wrap"/>
+     <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Activar inicio con Windows…" Click="EnableStartup_Click"/><Button Content="Desactivar inicio Windows" Click="DisableStartup_Click"/></StackPanel>
      <TextBlock Text="Auto-ocultamiento no disponible: se mantienen controles visibles y recuperación independiente. Materiales y animaciones respetan la política de Windows." TextWrapping="Wrap" Foreground="{ThemeResource NexSecondaryTextBrush}"/>
     </StackPanel></ScrollViewer>
-   </PivotItem>
-   <PivotItem Header="Diagnóstico">
+   </Grid>
+   <Grid x:Name="DiagnosticsSection" Visibility="Collapsed">
     <ScrollViewer><StackPanel Margin="8,12" Spacing="16" MaxWidth="760" HorizontalAlignment="Left">
      <TextBlock Text="Una sesión integrada, solo FLOATING" Style="{StaticResource NexTitleStyle}"/>
      <InfoBar IsOpen="True" IsClosable="False" Severity="Warning" Title="DESKTOP experimental y deshabilitado" Message="No se usa HWND_BOTTOM ni se modifica Explorer o sus iconos."/>
      <TextBlock x:Name="DiagnosticText" TextWrapping="Wrap" IsTextSelectionEnabled="True"/>
      <StackPanel Orientation="Horizontal" Spacing="8"><Button Content="Actualizar diagnóstico" Click="Diagnostics_Click"/><Button Content="Abrir carpeta de registros" Click="Logs_Click"/></StackPanel>
+     <Button Content="Crear copia de respaldo SQLite" Click="Backup_Click" HorizontalAlignment="Left"/>
      <TextBlock Text="Recuperar ventanas o Ctrl+Alt+Shift+F12 restaura contenedores, dock y NexManager. Cerrar NexManager o pulsar Salir cierra toda la sesión; las aplicaciones abiertas con Windows son independientes." TextWrapping="Wrap"/>
      <TextBlock Text="Fase 1 aceptada condicionalmente: pendientes drag-and-drop físico, accesibilidad, DPI/multimonitor, translucidez, animaciones y perfilado de memoria." TextWrapping="Wrap" Foreground="{ThemeResource NexSecondaryTextBrush}"/>
     </StackPanel></ScrollViewer>
-   </PivotItem>
-  </Pivot>
+   </Grid>
+   </Grid>
+  </NavigationView>
   <Border Grid.Row="2" Background="{ThemeResource NexElevatedBrush}" Padding="24,10"><TextBlock Text="{Binding Status}" Foreground="{ThemeResource NexSecondaryTextBrush}" TextWrapping="Wrap"/></Border>
  </Grid>
 </Page>

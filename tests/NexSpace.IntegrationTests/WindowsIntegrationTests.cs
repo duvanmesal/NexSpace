@@ -63,6 +63,31 @@ public class WindowsIntegrationTests
     }
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern nint CreateWindowEx(uint exStyle, string className, string windowName, uint style, int x, int y, int width, int height, nint parent, nint menu, nint instance, nint parameter);
+    [Fact]
+    public void Tray_registers_routes_v4_callback_and_disposes_repeatedly_on_own_test_hwnd()
+    {
+        var hwnd = CreateWindowEx(0,"STATIC","NexSpace isolated tray test",0,0,0,1,1,0,0,GetModuleHandle(null),0);
+        Assert.NotEqual(nint.Zero,hwnd);
+        try
+        {
+            var calls=0;
+            for(var i=0;i<3;i++)
+            {
+                var icon=new WindowsTrayIcon(hwnd,()=>calls++,()=>{},()=>{},()=>{},()=>[],_=>{});
+                SendMessage(hwnd,0x8000+70,0,(nint)0x400); Assert.Equal(i+1,calls);
+                icon.Dispose();icon.Dispose();SendMessage(hwnd,0x8000+70,0,(nint)0x400);Assert.Equal(i+1,calls);
+            }
+        }
+        finally { DestroyWindow(hwnd); }
+    }
+    [Fact]
+    public void Startup_rejects_untrusted_path_without_writing_registration()
+    {
+        var service=new WindowsStartupService();var before=service.GetStatus();
+        Assert.False(service.Enable("relative.exe").Succeeded);
+        Assert.False(service.Enable(Path.Combine(Path.GetTempPath(),Guid.NewGuid()+".exe")).Succeeded);
+        Assert.Equal(before,service.GetStatus());
+    }
     [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandle(string? moduleName);
     [DllImport("user32.dll", SetLastError = true)] private static extern bool DestroyWindow(nint hwnd);
     [DllImport("user32.dll", SetLastError = true)] private static extern nint SendMessage(nint hwnd, uint message, nint wParam, nint lParam);

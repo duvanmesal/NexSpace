@@ -18,7 +18,7 @@ internal sealed class DockWindow : Window
     private readonly WorkspaceViewModel _viewModel;
     private readonly Action<Guid?> _showManager;
     private readonly Action _recover;
-    private readonly Grid _root = new() { RequestedTheme = ElementTheme.Dark, RowDefinitions = { new() { Height = new GridLength(30) }, new() } };
+    private readonly Grid _root = new() { BorderThickness = new Thickness(1), RowDefinitions = { new() { Height = new GridLength(16) }, new() } };
     private readonly StackPanel _buttons = new() { Spacing = 8, Margin = new Thickness(12, 2, 12, 8) };
     private readonly DispatcherQueueTimer _saveTimer;
     private readonly List<Flyout> _flyouts = [];
@@ -38,8 +38,9 @@ internal sealed class DockWindow : Window
         ExtendsContentIntoTitleBar = true; SetTitleBar(grip);
         AppWindow.TitleBar.ButtonForegroundColor = Microsoft.UI.Colors.White;
         AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
-        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter) { presenter.IsMaximizable = false; presenter.IsResizable = false; }
+        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter) { presenter.IsMaximizable = false; presenter.IsResizable = false; presenter.SetBorderAndTitleBar(false, false); }
         NexGlassWindow.Apply(this, _root);
+        NexThemeManager.Register(this, _root);
         _saveTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         _saveTimer.IsRepeating = false; _saveTimer.Interval = TimeSpan.FromMilliseconds(450);
         _saveTimer.Tick += (_, _) => SaveFreePosition();
@@ -53,7 +54,8 @@ internal sealed class DockWindow : Window
             }
         };
         _root.Loaded += (_, _) => { if (_root.XamlRoot is { } xaml) xaml.Changed += RootChanged; ApplyPlacement(); };
-        Closed += (_, _) => { SaveFreePosition(); _closed = true; _saveTimer.Stop(); if (_root.XamlRoot is { } xaml) xaml.Changed -= RootChanged; ClearButtons(); SystemBackdrop = null; };
+        AppWindow.Closing += (_, _) => FlushPlacement();
+        Closed += (_, _) => { _closed = true; _saveTimer.Stop(); if (_root.XamlRoot is { } xaml) xaml.Changed -= RootChanged; ClearButtons(); SystemBackdrop = null; };
         Refresh();
     }
     private void RootChanged(XamlRoot sender, XamlRootChangedEventArgs args) { if (!_closed && !_placing) ApplyPlacement(); }
@@ -68,9 +70,10 @@ internal sealed class DockWindow : Window
         if (key != _layoutKey)
         {
             _layoutKey = key; ClearButtons();
-            _buttons.Orientation = state.Dock.Edge is DockEdge.Left or DockEdge.Right ? Orientation.Vertical : Orientation.Horizontal;
+            _buttons.Orientation = DockPlacementPolicy.IsVertical(state.Dock) ? Orientation.Vertical : Orientation.Horizontal;
+            _buttons.Spacing = state.Dock.Spacing;
             _buttons.HorizontalAlignment = _buttons.Orientation == Orientation.Vertical ? HorizontalAlignment.Center : HorizontalAlignment.Left;
-            _gripTitle.Visibility = _buttons.Orientation == Orientation.Vertical ? Visibility.Collapsed : Visibility.Visible;
+            _gripTitle.Visibility = Visibility.Collapsed;
             _buttons.Children.Add(ActionButton("\uE80F", "Manager", () => _showManager(null)));
             foreach (var category in state.Categories)
             {
@@ -93,16 +96,17 @@ internal sealed class DockWindow : Window
             }
             if (state.Categories.Count == 0) _buttons.Children.Add(ActionButton("\uE710", "Añadir categoría", () => _showManager(Guid.Empty)));
             _buttons.Children.Add(ActionButton("\uE777", "Recuperar", _recover));
+            _buttons.Children.Add(ActionButton("\uE711", "Cerrar dock", Close));
         }
         ApplyPlacement();
     }
     private Button ActionButton(string glyph, string label, Action? action)
     {
         var size = _viewModel.Snapshot.Dock.ItemSize;
-        var content = new StackPanel { Spacing = 5, Width = size + 16 };
+        var content = new StackPanel { Spacing = 5, Width = _viewModel.Snapshot.Dock.ShowLabels ? Math.Max(80, size + 16) : size + 16 };
         content.Children.Add(new FontIcon { Glyph = glyph, FontSize = Math.Min(size, 28), Foreground = Brush(_viewModel.Snapshot.Dock.AccentKey switch { "copper" => "NexCopperBrush", "blue-hour" => "NexBlueBrush", _ => "NexSeaBrush" }) });
-        content.Children.Add(new TextBlock { Text = label, FontSize = 11, TextAlignment = TextAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis });
-        var button = new Button { Content = content, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(8), Padding = new Thickness(6), MinHeight = 62 };
+        if (_viewModel.Snapshot.Dock.ShowLabels) content.Children.Add(new TextBlock { Text = label, FontSize = 11, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis });
+        var button = new Button { Content = content, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(8), Padding = new Thickness(6), MinHeight = _viewModel.Snapshot.Dock.ShowLabels ? 62 : 48 };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label); ToolTipService.SetToolTip(button, label);
         if (action is not null) button.Click += (_, _) => action(); return button;
     }
@@ -121,4 +125,5 @@ internal sealed class DockWindow : Window
         _workspace.Change(w => w with { Dock = w.Dock with { MonitorKey = display.Key, X = (position.X - display.WorkX) / scale, Y = (position.Y - display.WorkY) / scale } });
     }
     public void Restore() { _saveTimer.Stop(); _viewModel.Reload(); ApplyPlacement(); Activate(); }
+    public void FlushPlacement() { _saveTimer.Stop(); SaveFreePosition(); }
 }

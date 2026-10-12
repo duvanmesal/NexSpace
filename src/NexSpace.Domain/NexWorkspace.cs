@@ -2,10 +2,16 @@ namespace NexSpace.Domain;
 
 public enum DockEdge { Free, Bottom, Top, Left, Right }
 public sealed record DockCategory(Guid Id, string Name, string Glyph, Guid? ContainerId, IReadOnlyList<ContainerItemReference> Items);
-public sealed record DockSettings(DockEdge Edge, string MonitorKey, double X, double Y, int ItemSize, string AccentKey, bool ShowOnStartup);
+public sealed record DockSettings(DockEdge Edge, string MonitorKey, double X, double Y, int ItemSize, string AccentKey, bool ShowOnStartup)
+{
+    public DockOrientation Orientation { get; init; }
+    public bool ShowLabels { get; init; } = true;
+    public int Spacing { get; init; } = 8;
+}
 public sealed record SessionPreferences(bool RestoreContainers, bool ShowManagerOnStartup, IReadOnlyList<Guid> OpenContainers);
 public sealed record NexWorkspace(long Revision, DockSettings Dock, SessionPreferences Session, IReadOnlyList<DockCategory> Categories)
 {
+    public ThemeSettings Theme { get; init; } = ThemeSettings.Default;
     public static NexWorkspace Empty => new(0, new(DockEdge.Bottom, "", 100, 100, 44, "sea-glass", true), new(true, true, []), []);
 }
 
@@ -39,7 +45,8 @@ public static class WorkspaceRules
                 if (item.Id == Guid.Empty || item.TargetKey != ContainerRules.NormalizeTargetKey(item.Target)) throw new ArgumentException("Identidad de referencia no válida.");
             }
         }
-        return workspace with { Dock = workspace.Dock with { ItemSize = Math.Clamp(workspace.Dock.ItemSize, 32, 64), X = Math.Clamp(workspace.Dock.X, -100000, 100000), Y = Math.Clamp(workspace.Dock.Y, -100000, 100000) } };
+        if (!Enum.IsDefined(workspace.Dock.Orientation)) throw new ArgumentException("Orientación no válida.");
+        return workspace with { Theme = ThemeSettings.Validate(workspace.Theme), Dock = workspace.Dock with { Spacing = Math.Clamp(workspace.Dock.Spacing, 4, 20), ItemSize = Math.Clamp(workspace.Dock.ItemSize, 32, 64), X = Math.Clamp(workspace.Dock.X, -100000, 100000), Y = Math.Clamp(workspace.Dock.Y, -100000, 100000) } };
     }
 
     public static void ValidateReference(ContainerItemKind kind, string target, string label)

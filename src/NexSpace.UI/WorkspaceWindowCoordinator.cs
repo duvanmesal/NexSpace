@@ -13,6 +13,14 @@ internal sealed class WorkspaceWindowCoordinator(WorkspaceService workspace, Con
     private DockWindow? _dock;
     private bool _closing;
     public bool HasDock => _dock is not null;
+    public void SaveCurrentSession() { foreach (var w in _containers.Values.ToArray()) w.FlushPlacement(); _dock?.FlushPlacement(); SaveSession(); }
+    public void ToggleDock() { if (_dock is null) OpenDock(); else _dock.Close(); }
+    public void SuspendForProfileSwitch()
+    {
+        SaveCurrentSession(); _closing = true;
+        try { foreach (var w in _containers.Values.ToArray()) w.Close(); _containers.Clear(); _dock?.Close(); _dock = null; }
+        finally { _closing = false; }
+    }
     public void OpenContainer(Guid id)
     {
         if (_closing) return;
@@ -90,7 +98,8 @@ internal sealed class WorkspaceWindowCoordinator(WorkspaceService workspace, Con
     {
         if (_closing) return;
         _closing = true;
-        SaveSession();
+        try { SaveCurrentSession(); }
+        catch (Exception ex) { log.Write("session-save-on-exit-failed", "Continue disposing owned windows; retained last committed state", ex.GetType().Name); }
         foreach (var window in _containers.Values.ToArray()) try { window.Close(); } catch (Exception ex) { log.Write("window-close-failed", "Container", ex.GetType().Name); }
         _containers.Clear();
         try { _dock?.Close(); } catch (Exception ex) { log.Write("window-close-failed", "Dock", ex.GetType().Name); }

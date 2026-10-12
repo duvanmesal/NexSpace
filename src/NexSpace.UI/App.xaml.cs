@@ -23,6 +23,7 @@ namespace NexSpace.UI;
 public partial class App : Microsoft.UI.Xaml.Application
 {
     private Window? _window;
+    private Mutex? _instanceMutex;
     public static MainWindow? MainWindow { get; private set; }
 
     /// <summary>
@@ -32,8 +33,7 @@ public partial class App : Microsoft.UI.Xaml.Application
     public App()
     {
         InitializeComponent();
-        UnhandledException += (_, args) => new JsonEventLog().Write(
-            "unhandled-exception", args.Exception.GetType().Name, args.Exception.HResult.ToString("X8"));
+        UnhandledException += (_, args) => { var log = new JsonEventLog(); log.Write("unhandled-exception", args.Exception.GetType().Name, args.Exception.HResult.ToString("X8")); log.Write("unhandled-stack", string.Join(" | ", new System.Diagnostics.StackTrace(args.Exception, false).GetFrames().Select(f => f.GetMethod()?.ToString()))); };
     }
 
     /// <summary>
@@ -42,12 +42,18 @@ public partial class App : Microsoft.UI.Xaml.Application
     /// <param name="args">Details about the launch request and process.</param>
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
+        var data = Environment.GetEnvironmentVariable("NEXSPACE_DATA_DIR") ?? System.IO.Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NexSpace", "data");
+        var key = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(System.IO.Path.GetFullPath(data).ToUpperInvariant())));
+        _instanceMutex = new Mutex(true, "Local\\NexSpace-" + key, out var first);
+        if (!first) { _instanceMutex.Dispose(); _instanceMutex = null; new JsonEventLog().Write("duplicate-instance-rejected", "One writer per data directory"); Exit(); return; }
+        new JsonEventLog().Write("startup-begin", $"pid={Environment.ProcessId}; ticks={Environment.TickCount64}");
         MainWindow = new MainWindow();
         _window = MainWindow;
         _window.Closed += (_, _) =>
         {
             MainWindow?.Shutdown();
             new JsonEventLog().Write("application-closed", "Main window closed");
+            _instanceMutex?.ReleaseMutex(); _instanceMutex?.Dispose(); _instanceMutex = null;
         };
         _window.Activate();
         MainWindow.RegisterEmergencyHotkey();

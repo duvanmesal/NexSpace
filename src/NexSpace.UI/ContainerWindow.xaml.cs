@@ -42,6 +42,7 @@ public sealed partial class ContainerWindow : Window
         InitializeComponent();
         Root.DataContext = ViewModel;
         NexGlassWindow.Apply(this, Root);
+        NexThemeManager.Register(this, Root);
         _placementSaveTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         _placementSaveTimer.Interval = TimeSpan.FromMilliseconds(350);
         _placementSaveTimer.IsRepeating = false;
@@ -64,7 +65,7 @@ public sealed partial class ContainerWindow : Window
         AppWindow.MoveAndResize(new global::Windows.Graphics.RectInt32(_container.Placement.X, _container.Placement.Y, _container.Placement.Width, _container.Placement.Height));
         _lockedPosition = AppWindow.Position;
         RefreshItems();
-        Closed += (_, _) => SaveCurrentPlacement();
+        AppWindow.Closing += (_, _) => FlushPlacement();
         AppWindow.Changed += (_, args) =>
         {
             if (_correctingPosition) return;
@@ -295,11 +296,11 @@ public sealed partial class ContainerWindow : Window
         RefreshItems();
     }
 
-    private void SaveCurrentPlacement() => PersistCurrentPlacement();
+    public void FlushPlacement() { _placementSaveTimer.Stop(); PersistCurrentPlacement(); }
 
     private void PersistCurrentPlacement()
     {
-        if (_refreshing) return;
+        if (_refreshing || _closed) return;
         try
         {
             var rect = AppWindow.Position;
