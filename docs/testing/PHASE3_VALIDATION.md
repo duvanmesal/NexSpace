@@ -1,5 +1,7 @@
 # Fase 3 · Validación de perfiles, temas y Shell
 
+Actualización de autorización (2026-10-12): el usuario aceptó Fase 3 con alcance condicionado y autorizó Fase 4. Se auditaron y publicaron 0216de5/9521074 mediante push normal después de restore, Debug/Release y 63 pruebas Release PASS. El texto y resultados siguientes conservan el contexto de la entrega anterior; los pendientes no se convierten en PASS. Nueva evidencia en PHASE4_VALIDATION.md.
+
 Pruebas principales: 2026-10-11; consolidación final: 2026-10-12. Implementación entregada para revisión; no aceptación integral ni autorización de Fase 4. Fases 1 y 2 mantienen su aceptación condicionada y sus matrices históricas. FLOATING es la única presentación; DESKTOP experimental/deshabilitado. No se ejecutaron HWND_BOTTOM, SetParent/WorkerW, cambios de Explorer, iconos, Developer Mode ni inicio Windows.
 
 ## Entorno y evidencias

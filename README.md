@@ -91,4 +91,6 @@ Antes de publicar, revisar `git status`, `git diff --cached` y la lista de archi
 - `docs/phase-0/PLAN_Y_CRITERIOS.md`: plan y matriz de evidencia de Fase 0.
 - `assets/references/README.md`: guía de referencias visuales.
 
-Fase 2 publicada tras aceptación condicionada. Fase 3 autorizada, sus commits permanecen locales hasta revisión del usuario. No avanzar a Fase 4. Inicio con Windows desactivado por defecto; no activado en pruebas. Estado y pendientes en [roadmap](docs/ROADMAP.md).
+Fases 2 y 3 aceptadas condicionalmente y publicadas. Fase 4 autorizada para estabilización y preparación de distribución; sus cambios son únicamente locales. No es una declaración de disponibilidad de NexSpace 1.0. Inicio con Windows desactivado por defecto; no activado en pruebas. Estado y pendientes en [roadmap](docs/ROADMAP.md).
+
+Preparación de la candidata: [instalación y distribución](docs/phase-4/DISTRIBUCION.md), [uso y recuperación](docs/phase-4/USO_Y_RECUPERACION.md), [diagnóstico y aceptación](docs/testing/PHASE4_VALIDATION.md).
