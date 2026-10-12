@@ -6,8 +6,14 @@ namespace NexSpace.UnitTests;
 public sealed class Phase3Tests
 {
     [Theory]
-    [InlineData(ThemePreset.Dark)] [InlineData(ThemePreset.Light)] [InlineData(ThemePreset.Minimal)] [InlineData(ThemePreset.Contrast)]
+    [InlineData(ThemePreset.Dark)] [InlineData(ThemePreset.Light)] [InlineData(ThemePreset.Minimal)] [InlineData(ThemePreset.Contrast)] [InlineData(ThemePreset.Auto)]
     public void Themes_validate_and_preserve_preset(ThemePreset preset) => Assert.Equal(preset, ThemeSettings.Validate(ThemeSettings.Default with { Preset = preset }).Preset);
+    [Fact] public void Auto_preset_keeps_its_configured_accent_persisted_even_though_rendering_resolves_live()
+    {
+        var t = ThemeSettings.Validate(ThemeSettings.Default with { Preset = ThemePreset.Auto, Accent = "copper" });
+        Assert.Equal(ThemePreset.Auto, t.Preset);
+        Assert.Equal("copper", t.Accent);
+    }
     [Fact] public void Theme_limits_and_safe_fonts()
     {
         var t = ThemeSettings.Validate(ThemeSettings.Default with { Opacity = 0, CornerRadius = 99, Spacing = -100 });

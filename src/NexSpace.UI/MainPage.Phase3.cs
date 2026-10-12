@@ -69,12 +69,20 @@ public sealed partial class MainPage
     private async void DefaultProfile_Click(object sender, RoutedEventArgs e) { if (ProfilesList.SelectedItem is NexProfile p) await ProfileAction(() => Profiles.SetStartup(p.Id, RestoreLastProfileBox.IsChecked == true)); }
     private void LoadAppearance()
     {
-        ThemeBox.ItemsSource = new[] { "NexGlass Dark", "NexGlass Light", "NexGlass Minimal", "NexGlass Contrast" };
+        ThemeBox.ItemsSource = new[] { "NexGlass Dark", "NexGlass Light", "NexGlass Minimal", "NexGlass Contrast", "Automático (Windows)" };
         ThemeAccentBox.ItemsSource = new[] { "Verde agua", "Azul", "Cobre" }; FontBox.ItemsSource = new[] { "Segoe UI Variable", "Segoe UI", "Arial" };
         OrientationBox.ItemsSource = new[] { "Automática por borde", "Horizontal", "Vertical" };
         var t = ViewModel.Snapshot.Theme; ThemeBox.SelectedIndex = (int)t.Preset; ThemeAccentBox.SelectedIndex = t.Accent switch { "blue-hour" => 1, "copper" => 2, _ => 0 };
         FontBox.SelectedItem = t.Font; OpacityBox.Value = t.Opacity; RadiusBox.Value = t.CornerRadius; ThemeSpacingBox.Value = t.Spacing; MaterialBox.IsChecked = t.UseMaterial;
         OrientationBox.SelectedIndex = (int)ViewModel.Snapshot.Dock.Orientation;
+        UpdateAutoThemeHint();
+    }
+    private void ThemeBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateAutoThemeHint();
+    private void UpdateAutoThemeHint()
+    {
+        var isAuto = (ThemePreset)Math.Max(0, ThemeBox.SelectedIndex) == ThemePreset.Auto;
+        ThemeAccentBox.IsEnabled = !isAuto;
+        AutoThemeHint.Visibility = isAuto ? Visibility.Visible : Visibility.Collapsed;
     }
     private void ApplyTheme_Click(object sender, RoutedEventArgs e)
     {

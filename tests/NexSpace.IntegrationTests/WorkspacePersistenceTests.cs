@@ -81,6 +81,16 @@ public sealed class WorkspacePersistenceTests
         using (File.Open(db, FileMode.Open, FileAccess.ReadWrite, FileShare.None)) { }
     }
     [Fact]
+    public void Automatic_windows_theme_preset_and_accent_survive_save_and_reload()
+    {
+        using var scope = new IsolatedDirectory(); var db = Path.Combine(scope.Path, "test.db");
+        var service = new WorkspaceService(new SqliteWorkspaceRepository(db), new(new SqliteContainerRepository(db)), new Log());
+        Assert.True(service.Change(w => w with { Theme = w.Theme with { Preset = ThemePreset.Auto, Accent = "blue-hour" } }).Succeeded);
+        var reloaded = new SqliteWorkspaceRepository(db).Load();
+        Assert.Equal(ThemePreset.Auto, reloaded.Theme.Preset);
+        Assert.Equal("blue-hour", reloaded.Theme.Accent);
+    }
+    [Fact]
     public void Migration_v1_preserves_container_library_and_adds_shared_workspace()
     {
         using var scope = new IsolatedDirectory(); var db = Path.Combine(scope.Path, "test.db");
