@@ -104,7 +104,9 @@ public sealed partial class MainPage : Page
     {
         var c = Category; CategoryTitle.Text = c?.Name ?? "Selecciona una categoría";
         CategoryHint.Text = c is null ? "Crea una categoría para añadir referencias." : c.ContainerId is null ? "Referencias propias; no se copian ni mueven archivos." : "Contenido enlazado en vivo. Edítalo en su contenedor; no se duplica.";
-        DockItemsList.ItemsSource = c is null ? Array.Empty<ContainerItemViewModel>() : ViewModel.Items(c);
+        var items = c is null ? Array.Empty<ContainerItemViewModel>() : ViewModel.Items(c);
+        DockItemsList.ItemsSource = items;
+        DockItemsEmptyState.Visibility = c is not null && items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
     private async void CreateCategory_Click(object sender, RoutedEventArgs e) { var name = await Prompt("Nueva categoría", ""); if (name is null) return; var result = _workspace.AddCategory(name); Report(result); if (result.Succeeded) CategoriesList.SelectedItem = ViewModel.Categories.LastOrDefault(); }
     private async void EditCategory_Click(object sender, RoutedEventArgs e)

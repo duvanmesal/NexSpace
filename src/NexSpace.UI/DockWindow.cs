@@ -94,13 +94,19 @@ internal sealed class DockWindow : Window
                 var content = new StackPanel { Spacing = 10, MinWidth = 280, MaxWidth = 380 };
                 content.Children.Add(new TextBlock { Text = category.Name, Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["NexTitleStyle"] });
                 var items = _viewModel.Items(category);
-                if (items.Count == 0) content.Children.Add(new TextBlock { Text = category.ContainerId is null ? "Categoría vacía. Añade referencias en NexManager." : "Contenedor vacío o no disponible. Revisa NexManager.", TextWrapping = TextWrapping.Wrap });
+                if (items.Count == 0)
+                {
+                    var empty = new StackPanel { Spacing = 6, HorizontalAlignment = HorizontalAlignment.Center, Padding = new Thickness(0, 12, 0, 12) };
+                    empty.Children.Add(new FontIcon { Glyph = "", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 24, Foreground = Brush("NexSecondaryTextBrush"), HorizontalAlignment = HorizontalAlignment.Center });
+                    empty.Children.Add(new TextBlock { Text = category.ContainerId is null ? "Categoría vacía. Añade referencias en NexManager." : "Contenedor vacío o no disponible. Revisa NexManager.", TextWrapping = TextWrapping.Wrap, TextAlignment = TextAlignment.Center, Foreground = Brush("NexSecondaryTextBrush") });
+                    content.Children.Add(empty);
+                }
                 var list = new ListView { ItemsSource = items, IsItemClickEnabled = true, SelectionMode = ListViewSelectionMode.Single, MaxHeight = 380,
                     ItemTemplate = (DataTemplate)Microsoft.UI.Xaml.Application.Current.Resources["NexReferenceTemplate"], ItemContainerStyle = (Style)Microsoft.UI.Xaml.Application.Current.Resources["NexReferenceItemStyle"] };
                 var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brush("NexWarningBrush") };
                 list.ItemClick += (_, args) => { if (args.ClickedItem is ContainerItemViewModel item) { _viewModel.Open(item.Reference); status.Text = _viewModel.Status; } };
                 content.Children.Add(list); content.Children.Add(status);
-                var manage = new Button { Content = "Administrar en NexManager" }; manage.Click += (_, _) => _showManager(category.Id); content.Children.Add(manage);
+                var manage = new Button { Content = "Administrar en NexManager", HorizontalAlignment = HorizontalAlignment.Left }; manage.Click += (_, _) => _showManager(category.Id); content.Children.Add(manage);
                 var flyout = new Flyout { Content = content, ShouldConstrainToRootBounds = false, Placement = state.Dock.Edge switch { DockEdge.Top => FlyoutPlacementMode.Bottom, DockEdge.Left => FlyoutPlacementMode.Right, DockEdge.Right => FlyoutPlacementMode.Left, _ => FlyoutPlacementMode.Top } };
                 button.Flyout = flyout; _flyouts.Add(flyout);
                 var menu = new MenuFlyout(); var edit = new MenuFlyoutItem { Text = "Administrar categoría", Command = new SimpleCommand(() => _showManager(category.Id)) }; menu.Items.Add(edit);

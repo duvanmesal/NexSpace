@@ -45,6 +45,18 @@
         <Setter Property="MinWidth" Value="32" /><Setter Property="Height" Value="32" />
         <Setter Property="Foreground" Value="{ThemeResource NexSecondaryTextBrush}" />
     </Style>
+    <!-- Reserved for the single destructive action per surface (e.g. "Salir") — never for routine actions. -->
+    <Style x:Key="NexDestructiveButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+        <Setter Property="Background" Value="Transparent" /><Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NexWarningBrush}" /><Setter Property="Foreground" Value="{ThemeResource NexWarningBrush}" />
+        <Setter Property="CornerRadius" Value="8" />
+    </Style>
+    <Style x:Key="NexAffordanceChipStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource NexElevatedBrush}" />
+        <Setter Property="CornerRadius" Value="999" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="IsHitTestVisible" Value="False" />
+    </Style>
     <Style x:Key="NexReferenceItemStyle" TargetType="ListViewItem">
         <Setter Property="Padding" Value="2" /><Setter Property="Margin" Value="2" />
         <Setter Property="CornerRadius" Value="8" /><Setter Property="HorizontalContentAlignment" Value="Stretch" />
