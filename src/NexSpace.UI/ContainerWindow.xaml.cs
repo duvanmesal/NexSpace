@@ -49,10 +49,12 @@ public sealed partial class ContainerWindow : Window
         _placementSaveTimer.Tick += PlacementTimerTick;
         Title = _container.Name;
 
-        ExtendsContentIntoTitleBar = true;
-        SetTitleBar(DragRegion);
-        AppWindow.TitleBar.ButtonForegroundColor = Microsoft.UI.Colors.White;
-        AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
+        // Native caption customization (ExtendsContentIntoTitleBar + TitleBar button colors)
+        // reproducibly accumulates GDI objects on the validated runtime (Phase 4 investigation).
+        // Permanently disabled: let Windows own the title bar and caption buttons. Do not
+        // re-enable without a validated fix — coordinate with the native-stability work first.
+        Root.RowDefinitions[0].Height = new GridLength(0);
+        DragRegion.Visibility = Visibility.Collapsed;
         var displays = new WindowsDisplayService().GetDisplays();
         var display = displays.FirstOrDefault(candidate => candidate.Key == _container.Placement.MonitorKey) ?? displays.FirstOrDefault(candidate => candidate.IsPrimary) ?? displays.FirstOrDefault();
         if (display is not null)

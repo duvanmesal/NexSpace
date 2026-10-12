@@ -7,7 +7,20 @@ namespace NexSpace.UI.Visuals;
 internal static class NexThemeManager
 {
     private static readonly List<(WeakReference<Window> Window, WeakReference<Grid> Root)> Targets = [];
+    private static readonly global::Windows.UI.ViewManagement.UISettings SystemSettings = new();
     public static ThemeSettings Current { get; private set; } = ThemeSettings.Default;
+    static NexThemeManager()
+    {
+        // Fires on a non-UI thread; only reacts when the user has Auto selected, and marshals
+        // the re-apply back onto each target window's dispatcher.
+        SystemSettings.ColorValuesChanged += (_, _) =>
+        {
+            if (Current.Preset != ThemePreset.Auto) return;
+            foreach (var t in Targets.ToArray())
+                if (t.Window.TryGetTarget(out var w) && t.Root.TryGetTarget(out var r))
+                    w.DispatcherQueue.TryEnqueue(() => ApplyTarget(w, r));
+        };
+    }
     public static void Register(Window window, Grid root)
     {
         if (Targets.Any(t => t.Window.TryGetTarget(out var w) && ReferenceEquals(w, window))) return;
@@ -38,12 +51,23 @@ internal static class NexThemeManager
     private static void ApplyTargetCore(Window window, Grid root)
     {
         var highContrast = new global::Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
-        var light = Current.Preset == ThemePreset.Light;
-        var contrast = Current.Preset == ThemePreset.Contrast;
-        var background = light ? "#F2F5F7" : contrast ? "#000000" : Current.Preset == ThemePreset.Minimal ? "#151719" : "#22272E";
+        var preset = Current.Preset;
+        var accentKey = Current.Accent;
+        if (preset == ThemePreset.Auto)
+        {
+            // Capability/preference detection, not an OS-version guess: read the live system
+            // app background + accent color and react to them, per the Auto-theme contract.
+            var bg = SystemSettings.GetColorValue(global::Windows.UI.ViewManagement.UIColorType.Background);
+            var sysAccent = SystemSettings.GetColorValue(global::Windows.UI.ViewManagement.UIColorType.Accent);
+            preset = AutoThemeResolver.ResolveBaseline(AutoThemeResolver.IsLightBackground(bg.R, bg.G, bg.B));
+            accentKey = AutoThemeResolver.ResolveNearestAccent(sysAccent.R, sysAccent.G, sysAccent.B);
+        }
+        var light = preset == ThemePreset.Light;
+        var contrast = preset == ThemePreset.Contrast;
+        var background = light ? "#F2F5F7" : contrast ? "#000000" : preset == ThemePreset.Minimal ? "#151719" : "#22272E";
         var text = light ? "#18242E" : "#F2F5F7";
         var secondary = light ? "#394C5B" : contrast ? "#FFFFFF" : "#C2CAD2";
-        var accent = contrast ? "#FFFF64" : Current.Accent switch { "copper" => light ? "#884326" : "#DEA78E", "blue-hour" => light ? "#185F99" : "#91BFE3", _ => light ? "#206856" : "#92CDBB" };
+        var accent = contrast ? "#FFFF64" : accentKey switch { "copper" => light ? "#884326" : "#DEA78E", "blue-hour" => light ? "#185F99" : "#91BFE3", _ => light ? "#206856" : "#92CDBB" };
         if (!highContrast)
         {
             Set(root, "NexSolidSurfaceBrush", background); Set(root, "NexTextBrush", text); Set(root, "NexSecondaryTextBrush", secondary);
@@ -60,12 +84,8 @@ internal static class NexThemeManager
         var foreground = Resolve(root, "NexTextBrush");
         StyleTree(root, highContrast, foreground);
         root.DispatcherQueue.TryEnqueue(() => { try { if (Targets.Any(t => t.Root.TryGetTarget(out var live) && ReferenceEquals(live, root))) StyleTree(root, highContrast, foreground); } catch (Exception ex) { new NexSpace.Infrastructure.JsonEventLog().Write("theme-tree-failed", ex.GetType().Name, ex.HResult.ToString("X8")); } });
-        if (window.AppWindow.TitleBar is { } title)
-        {
-            var caption = light && window is not MainWindow ? Color("#18242E") : Microsoft.UI.Colors.White;
-            title.ButtonForegroundColor = caption;
-            title.ButtonInactiveForegroundColor = caption;
-        }
+        // Let Windows own caption colors. Repeated native customization accumulates GDI
+        // resources on the validated runtime (Phase 4 investigation) — do not reintroduce.
     }
     private static void StyleTree(DependencyObject parent, bool highContrast, Brush foreground)
     {
