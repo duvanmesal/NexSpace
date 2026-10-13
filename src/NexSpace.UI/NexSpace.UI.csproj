@@ -11,6 +11,17 @@
     <UseWinUI>true</UseWinUI>
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
+    <!--
+      Unpackaged launch: bundle the Windows App SDK runtime into the app folder instead of
+      depending on the machine-registered framework MSIX package + bootstrapper deployment.
+      This removes the REGDB_E_CLASSNOTREG class of start-up failures (bootstrapper unable to
+      activate a matching registered runtime) without any global install, Developer Mode, or
+      registry change. Diagnostic/dev build config only — does NOT touch window lifecycle,
+      caption chrome, timers, or recovery. If this project is ever MSIX-packaged, set
+      WindowsAppSDKSelfContained=false in that build.
+    -->
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
