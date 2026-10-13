@@ -45,23 +45,10 @@ public sealed partial class MainPage
         var containers = ViewModel.Containers.Count;
         var categories = ViewModel.Categories.Count;
         var references = ViewModel.Containers.Sum(c => c.Items.Count);
-        TileContainers.Text = containers.ToString();
-        TileCategories.Text = categories.ToString();
-        TileReferences.Text = references.ToString();
-        TileTheme.Text = ViewModel.Snapshot.Theme.Preset switch
-        {
-            ThemePreset.Light => "Claro", ThemePreset.Minimal => "Minimal",
-            ThemePreset.Contrast => "Contraste", ThemePreset.Auto => "Automático",
-            _ => ViewModel.Snapshot.Theme.Accent switch { "blue-hour" => "Azul", "copper" => "Cobre", _ => "Verde agua" }
-        };
         DashboardSummary.Text = containers == 0
-            ? "Aún no hay contenedores en este espacio. Crea el primero para empezar a organizar."
+            ? "Aún no hay contenedores. Crea el primero y aparecerá flotando sobre el escritorio."
             : $"{containers} contenedor{(containers == 1 ? "" : "es")} · {categories} categoría{(categories == 1 ? "" : "s")} · {references} referencia{(references == 1 ? "" : "s")}. Tus archivos originales permanecen intactos.";
-        if (Profiles.Profiles.FirstOrDefault(p => p.Id == Profiles.State.ActiveId) is { } active)
-            HomeHeroEdge.Fill = new Microsoft.UI.Xaml.Media.SolidColorBrush(HexColor(WorkspaceColor.ForId(active.Id)));
     }
-    private static global::Windows.UI.Color HexColor(string hex) =>
-        global::Windows.UI.Color.FromArgb(255, Convert.ToByte(hex.Substring(1, 2), 16), Convert.ToByte(hex.Substring(3, 2), 16), Convert.ToByte(hex.Substring(5, 2), 16));
     private async Task ProfileAction(Action action)
     {
         try { action(); LoadProfiles(); }

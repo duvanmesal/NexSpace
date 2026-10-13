@@ -35,37 +35,22 @@
     <NavigationViewItem Content="Diagnóstico" Tag="Diagnostics" Icon="Repair"/>
    </NavigationView.MenuItems>
    <Grid Margin="24,12">
-   <ScrollViewer x:Name="HomeSection"><StackPanel Spacing="20" MaxWidth="880" HorizontalAlignment="Left" Padding="2,2,2,28">
-    <!-- Editorial "now" panel: active workspace with copper identity edge -->
-    <Border Style="{StaticResource NexHeroPanelStyle}">
-     <Grid>
-      <Grid.ColumnDefinitions><ColumnDefinition Width="5"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-      <Rectangle x:Name="HomeHeroEdge" Fill="{ThemeResource NexSeaBrush}" RadiusX="2.5" RadiusY="2.5"/>
-      <StackPanel Grid.Column="1" Spacing="7" Padding="26,24">
-       <TextBlock Text="ESPACIO ACTIVO" Style="{StaticResource NexEyebrowStyle}" Foreground="{ThemeResource NexSeaBrush}"/>
-       <TextBlock x:Name="ActiveProfileText" Text="Principal" FontSize="34" FontWeight="SemiBold" LineHeight="38"/>
-       <TextBlock x:Name="DashboardSummary" Text="Organiza referencias sin mover tus archivos originales." TextWrapping="Wrap" Foreground="{ThemeResource NexSecondaryTextBrush}" FontSize="14.5"/>
-       <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,12,0,0">
-        <Button Style="{StaticResource NexAccentButtonStyle}" Click="Create_Click">
-         <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="14"/><TextBlock Text="Nuevo contenedor"/></StackPanel>
-        </Button>
-        <Button Content="Mostrar dock" Click="Dock_Click"/>
-       </StackPanel>
-      </StackPanel>
-     </Grid>
-    </Border>
-    <!-- Live metric tiles -->
-    <Grid ColumnSpacing="12">
-     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-     <Border Grid.Column="0" Style="{StaticResource NexStatTileStyle}"><StackPanel Spacing="5"><TextBlock x:Name="TileContainers" Text="0" Style="{StaticResource NexStatNumberStyle}"/><TextBlock Text="CONTENEDORES" Style="{StaticResource NexEyebrowStyle}" FontSize="10.5"/></StackPanel></Border>
-     <Border Grid.Column="1" Style="{StaticResource NexStatTileStyle}"><StackPanel Spacing="5"><TextBlock x:Name="TileCategories" Text="0" Style="{StaticResource NexStatNumberStyle}"/><TextBlock Text="CATEGORÍAS" Style="{StaticResource NexEyebrowStyle}" FontSize="10.5"/></StackPanel></Border>
-     <Border Grid.Column="2" Style="{StaticResource NexStatTileStyle}"><StackPanel Spacing="5"><TextBlock x:Name="TileReferences" Text="0" Style="{StaticResource NexStatNumberStyle}"/><TextBlock Text="REFERENCIAS" Style="{StaticResource NexEyebrowStyle}" FontSize="10.5"/></StackPanel></Border>
-     <Border Grid.Column="3" Style="{StaticResource NexStatTileStyle}"><StackPanel Spacing="5"><TextBlock x:Name="TileTheme" Text="Cobre" FontSize="16" FontWeight="SemiBold" Foreground="{ThemeResource NexSeaBrush}"/><TextBlock Text="TEMA ACTIVO" Style="{StaticResource NexEyebrowStyle}" FontSize="10.5"/></StackPanel></Border>
-    </Grid>
-    <!-- Secure access note -->
-    <Border Style="{StaticResource NexLibrarySurfaceStyle}" Padding="18,15" Margin="0,2,0,0">
-     <StackPanel Spacing="6">
-      <StackPanel Orientation="Horizontal" Spacing="9"><FontIcon Glyph="&#xE72E;" FontFamily="Segoe Fluent Icons" FontSize="15" Foreground="{ThemeResource NexSeaBrush}"/><TextBlock Text="Acceso seguro" Style="{StaticResource NexTitleStyle}"/></StackPanel>
+   <ScrollViewer x:Name="HomeSection"><StackPanel Spacing="18" MaxWidth="600" HorizontalAlignment="Left" Padding="2,10,2,24">
+    <!-- Calm, quiet landing — NexManager is a tool, not the face of the product. -->
+    <StackPanel Spacing="5">
+     <TextBlock Text="ESPACIO ACTIVO" Style="{StaticResource NexEyebrowStyle}"/>
+     <TextBlock x:Name="ActiveProfileText" Text="Principal" FontSize="27" FontWeight="SemiBold" LineHeight="32"/>
+     <TextBlock x:Name="DashboardSummary" Text="Tus contenedores y el dock viven sobre el escritorio." TextWrapping="Wrap" Foreground="{ThemeResource NexSecondaryTextBrush}" FontSize="14"/>
+    </StackPanel>
+    <StackPanel Orientation="Horizontal" Spacing="10">
+     <Button Style="{StaticResource NexAccentButtonStyle}" Click="Create_Click">
+      <StackPanel Orientation="Horizontal" Spacing="8"><FontIcon Glyph="&#xE710;" FontFamily="Segoe Fluent Icons" FontSize="14"/><TextBlock Text="Nuevo contenedor"/></StackPanel>
+     </Button>
+     <Button Content="Mostrar dock" Click="Dock_Click"/>
+    </StackPanel>
+    <Border Style="{StaticResource NexLibrarySurfaceStyle}" Padding="16,13" Margin="0,8,0,0">
+     <StackPanel Spacing="5">
+      <StackPanel Orientation="Horizontal" Spacing="9"><FontIcon Glyph="&#xE72E;" FontFamily="Segoe Fluent Icons" FontSize="14" Foreground="{ThemeResource NexSeaBrush}"/><TextBlock Text="Acceso seguro" Style="{StaticResource NexTitleStyle}"/></StackPanel>
       <TextBlock Text="Ctrl + Alt + Shift + F12 recupera tus ventanas desde cualquier aplicación. FLOTANTE activo; DESKTOP deshabilitado." TextWrapping="Wrap" Foreground="{ThemeResource NexSecondaryTextBrush}" FontSize="13"/>
      </StackPanel>
     </Border>

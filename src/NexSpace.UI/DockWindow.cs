@@ -18,8 +18,8 @@ internal sealed class DockWindow : Window
     private readonly WorkspaceViewModel _viewModel;
     private readonly Action<Guid?> _showManager;
     private readonly Action _recover;
-    private readonly Grid _root = new() { BorderThickness = new Thickness(1), RowDefinitions = { new() { Height = new GridLength(16) }, new() } };
-    private readonly StackPanel _buttons = new() { Spacing = 8, Margin = new Thickness(12, 2, 12, 8) };
+    private readonly Grid _root = new() { BorderThickness = new Thickness(1), RowDefinitions = { new() { Height = new GridLength(9) }, new() } };
+    private readonly StackPanel _buttons = new() { Spacing = 6, Margin = new Thickness(10, 1, 10, 9) };
     private readonly DispatcherQueueTimer _saveTimer;
     private readonly List<Flyout> _flyouts = [];
     private readonly TextBlock _gripTitle = new() { Text = "NexDock", FontSize = 11, Margin = new Thickness(14, 6, 0, 0) };
@@ -31,10 +31,9 @@ internal sealed class DockWindow : Window
     {
         _workspace = workspace; _viewModel = viewModel; _showManager = showManager; _recover = recover;
         Title = "NexSpace · NexDock"; Content = _root;
+        // Thin transparent drag strip at the top of the pill (no visible handle — Concept C
+        // keeps the dock a clean silhouette). The whole strip is the title-bar/drag region.
         var grip = new Grid(); _gripTitle.Foreground = Brush("NexSecondaryTextBrush"); grip.Children.Add(_gripTitle);
-        // Visual drag affordance: a small centered handle in the title/drag strip.
-        grip.Children.Add(new Border { Width = 26, Height = 3, CornerRadius = new CornerRadius(2), Background = Brush("NexDividerBrush"),
-            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 5, 0, 0) });
         _root.Children.Add(grip);
         var scroll = new ScrollViewer { Content = _buttons, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Grid.SetRow(scroll, 1); _root.Children.Add(scroll);
@@ -94,9 +93,22 @@ internal sealed class DockWindow : Window
             _buttons.Children.Add(Separator());
             foreach (var category in state.Categories)
             {
-                var button = ActionButton(category.Glyph, category.Name, null, accentIcon: true, dotHex: WorkspaceColor.ForId(category.Id));
-                var content = new StackPanel { Spacing = 10, MinWidth = 280, MaxWidth = 380 };
-                content.Children.Add(new TextBlock { Text = category.Name, Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["NexTitleStyle"] });
+                var button = ActionButton(category.Glyph, category.Name, null, dotHex: WorkspaceColor.ForId(category.Id));
+                var content = new StackPanel { Spacing = 7, MinWidth = 232, MaxWidth = 300 };
+                // Compact header: icon + name + a discreet "manage" affordance (Concept C popover).
+                var header = new Grid { ColumnSpacing = 9 };
+                header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                header.ColumnDefinitions.Add(new ColumnDefinition());
+                header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                var hIcon = new FontIcon { Glyph = category.Glyph, FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 16, Foreground = Brush("NexTextBrush"), VerticalAlignment = VerticalAlignment.Center };
+                var hName = new TextBlock { Text = category.Name, Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["NexTitleStyle"], VerticalAlignment = VerticalAlignment.Center };
+                Grid.SetColumn(hName, 1);
+                var manageIcon = new Button { Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["NexQuietButtonStyle"], Content = new FontIcon { Glyph = "", FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = 13 } };
+                ToolTipService.SetToolTip(manageIcon, "Administrar en NexManager"); Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(manageIcon, "Administrar en NexManager");
+                manageIcon.Click += (_, _) => _showManager(category.Id); Grid.SetColumn(manageIcon, 2);
+                header.Children.Add(hIcon); header.Children.Add(hName); header.Children.Add(manageIcon);
+                content.Children.Add(header);
+                content.Children.Add(new Border { Height = 1, Background = Brush("NexDividerBrush"), Margin = new Thickness(0, 0, 0, 1) });
                 var items = _viewModel.Items(category);
                 if (items.Count == 0)
                 {
@@ -110,37 +122,39 @@ internal sealed class DockWindow : Window
                 var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brush("NexWarningBrush") };
                 list.ItemClick += (_, args) => { if (args.ClickedItem is ContainerItemViewModel item) { _viewModel.Open(item.Reference); status.Text = _viewModel.Status; } };
                 content.Children.Add(list); content.Children.Add(status);
-                var manage = new Button { Content = "Administrar en NexManager", HorizontalAlignment = HorizontalAlignment.Left }; manage.Click += (_, _) => _showManager(category.Id); content.Children.Add(manage);
                 var flyout = new Flyout { Content = content, ShouldConstrainToRootBounds = false, Placement = state.Dock.Edge switch { DockEdge.Top => FlyoutPlacementMode.Bottom, DockEdge.Left => FlyoutPlacementMode.Right, DockEdge.Right => FlyoutPlacementMode.Left, _ => FlyoutPlacementMode.Top } };
                 button.Flyout = flyout; _flyouts.Add(flyout);
+                // Active-category glow (Concept C): underline the open category while its popover shows.
+                flyout.Opened += (_, _) => { if (button.Tag is Border g) g.Visibility = Visibility.Visible; };
+                flyout.Closed += (_, _) => { if (button.Tag is Border g) g.Visibility = Visibility.Collapsed; };
                 var menu = new MenuFlyout(); var edit = new MenuFlyoutItem { Text = "Administrar categoría", Command = new SimpleCommand(() => _showManager(category.Id)) }; menu.Items.Add(edit);
                 menu.Items.Add(new MenuFlyoutItem { Text = "Recuperar ventanas", Command = new SimpleCommand(_recover) }); button.ContextFlyout = menu;
                 _buttons.Children.Add(button);
             }
-            if (state.Categories.Count == 0) _buttons.Children.Add(ActionButton("\uE710", "Añadir", () => _showManager(Guid.Empty), accentIcon: true));
+            if (state.Categories.Count == 0) _buttons.Children.Add(ActionButton("\uE710", "Añadir", () => _showManager(Guid.Empty)));
             _buttons.Children.Add(Separator());
             _buttons.Children.Add(ActionButton("\uE777", "Recuperar", _recover));
             _buttons.Children.Add(ActionButton("\uE711", "Cerrar", Close));
         }
         ApplyPlacement();
     }
-    // Utility actions (Manager/Recuperar/Cerrar) use a neutral icon so the category buttons —
-    // which carry the accent and their identity dot — are what reads as the content of the dock.
-    private Button ActionButton(string glyph, string label, Action? action, bool accentIcon = false, string? dotHex = null)
+    // Concept C dock: clean white monochrome icons; category identity shown by a small dot, and
+    // the open category by a soft accent underglow (button.Tag holds that glow element). Premium
+    // icon-first pill; labels are optional.
+    private Button ActionButton(string glyph, string label, Action? action, string? dotHex = null)
     {
         var size = _viewModel.Snapshot.Dock.ItemSize;
         var showLabels = _viewModel.Snapshot.Dock.ShowLabels;
-        var iconBrush = accentIcon
-            ? Brush(_viewModel.Snapshot.Dock.AccentKey switch { "copper" => "NexCopperBrush", "blue-hour" => "NexBlueBrush", _ => "NexSeaBrush" })
-            : Brush("NexSecondaryTextBrush");
         var iconHost = new Grid { Width = size, Height = size, HorizontalAlignment = HorizontalAlignment.Center };
-        iconHost.Children.Add(new FontIcon { Glyph = glyph, FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = Math.Min(size, 22), Foreground = iconBrush, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+        iconHost.Children.Add(new FontIcon { Glyph = glyph, FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = Math.Min(size, 23), Foreground = Brush("NexTextBrush"), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
         if (dotHex is not null)
-            iconHost.Children.Add(new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), Background = new SolidColorBrush(HexColor(dotHex)), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 1, 1, 0) });
-        var content = new StackPanel { Spacing = 4, Width = showLabels ? Math.Max(72, size + 18) : size + 14, HorizontalAlignment = HorizontalAlignment.Center };
+            iconHost.Children.Add(new Border { Width = 7, Height = 7, CornerRadius = new CornerRadius(3.5), Background = new SolidColorBrush(HexColor(dotHex)), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 2, 2, 0) });
+        var glow = new Border { Height = 3, Width = Math.Min(size - 8, 22), CornerRadius = new CornerRadius(2), Background = Brush("NexSeaBrush"), HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 1), Visibility = Visibility.Collapsed };
+        iconHost.Children.Add(glow);
+        var content = new StackPanel { Spacing = 3, Width = showLabels ? Math.Max(72, size + 18) : size + 16, HorizontalAlignment = HorizontalAlignment.Center };
         content.Children.Add(iconHost);
         if (showLabels) content.Children.Add(new TextBlock { Text = label, FontSize = 11, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis });
-        var button = new Button { Content = content, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(9), Padding = new Thickness(5), MinHeight = showLabels ? 58 : 44 };
+        var button = new Button { Content = content, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(11), Padding = new Thickness(5), MinHeight = showLabels ? 58 : size + 10, Tag = glow };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label); ToolTipService.SetToolTip(button, label);
         if (action is not null) button.Click += (_, _) => action(); return button;
     }

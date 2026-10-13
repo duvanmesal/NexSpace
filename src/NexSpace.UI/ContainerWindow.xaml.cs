@@ -288,6 +288,13 @@ public sealed partial class ContainerWindow : Window
     private void Options_Click(object sender, RoutedEventArgs e)
     {
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight };
+        // View + accent live here now so the header stays discreet (Concept C: minimal chrome).
+        menu.Items.Add(Menu(_container.ViewMode == ContainerViewMode.Grid ? "Ver como lista" : "Ver como cuadrícula", () => ApplyPresentation(viewMode: _container.ViewMode == ContainerViewMode.Grid ? ContainerViewMode.List : ContainerViewMode.Grid)));
+        var color = new MenuFlyoutSubItem { Text = "Color del contenedor" };
+        foreach (var accent in new[] { ("Azul", "blue-hour"), ("Verde agua", "sea-glass"), ("Cobre", "copper") })
+            color.Items.Add(Menu(accent.Item1, () => ApplyPresentation(accentKey: accent.Item2)));
+        menu.Items.Add(color);
+        menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Menu(_container.IsCollapsed ? "Expandir" : "Contraer", () => ApplyPresentation(collapsed: !_container.IsCollapsed)));
         menu.Items.Add(Menu(_container.IsPositionLocked ? "Desbloquear posición" : "Bloquear posición", () =>
         {

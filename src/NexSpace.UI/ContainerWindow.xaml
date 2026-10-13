@@ -2,15 +2,12 @@
     <Grid x:Name="Root" Padding="14,0,14,12" RowSpacing="10" CornerRadius="{ThemeResource NexPanelCornerRadius}" BorderThickness="1" BorderBrush="{ThemeResource NexDividerBrush}">
         <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <Grid x:Name="DragRegion" Background="Transparent" Margin="0,0,140,0" />
-        <Grid x:Name="Header" Grid.Row="1" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="4" Height="36">
-            <Border Grid.Column="0" Width="30" Height="30" CornerRadius="8" Background="{ThemeResource ListViewItemBackgroundSelected}" Margin="0,0,10,0" VerticalAlignment="Center">
-                <FontIcon x:Name="ContainerIcon" Glyph="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource NexSeaBrush}" />
-            </Border>
+        <Grid x:Name="Header" Grid.Row="1" ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="2" Height="34">
+            <FontIcon x:Name="ContainerIcon" Grid.Column="0" Glyph="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="17" Foreground="{ThemeResource NexTextBrush}" Margin="2,0,11,0" VerticalAlignment="Center" />
             <TextBlock x:Name="TitleText" Grid.Column="1" Text="{Binding Name}" Style="{ThemeResource NexTitleStyle}" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding Name}" />
             <Button Grid.Column="2" Style="{ThemeResource NexQuietButtonStyle}" AutomationProperties.Name="Añadir referencias" ToolTipService.ToolTip="Añadir referencias" Click="Add_Click"><FontIcon Glyph="&#xE710;" FontSize="14"/></Button>
-            <Button Grid.Column="3" Style="{ThemeResource NexQuietButtonStyle}" AutomationProperties.Name="Vista y apariencia" ToolTipService.ToolTip="Vista y apariencia" Click="View_Click"><FontIcon Glyph="&#xE8A9;" FontSize="14"/></Button>
-            <Button Grid.Column="4" Style="{ThemeResource NexQuietButtonStyle}" AutomationProperties.Name="Contraer o expandir" ToolTipService.ToolTip="Contraer o expandir" Click="Collapse_Click"><FontIcon x:Name="CollapseIcon" Glyph="&#xE70E;" FontSize="14"/></Button>
-            <Button Grid.Column="5" Style="{ThemeResource NexQuietButtonStyle}" AutomationProperties.Name="Opciones del contenedor" ToolTipService.ToolTip="Opciones del contenedor" Click="Options_Click"><FontIcon Glyph="&#xE712;" FontSize="14"/></Button>
+            <Button Grid.Column="3" Style="{ThemeResource NexQuietButtonStyle}" AutomationProperties.Name="Contraer o expandir" ToolTipService.ToolTip="Contraer o expandir" Click="Collapse_Click"><FontIcon x:Name="CollapseIcon" Glyph="&#xE70E;" FontSize="14"/></Button>
+            <Button Grid.Column="4" Style="{ThemeResource NexQuietButtonStyle}" AutomationProperties.Name="Vista y opciones" ToolTipService.ToolTip="Vista y opciones" Click="Options_Click"><FontIcon Glyph="&#xE712;" FontSize="14"/></Button>
         </Grid>
         <Grid x:Name="ContentArea" Grid.Row="2" BorderBrush="{ThemeResource NexDividerBrush}" BorderThickness="0,1,0,0" Padding="0,8,0,0">
             <ListView x:Name="ItemsView" ItemsSource="{Binding Items}" ItemTemplate="{ThemeResource NexReferenceTemplate}" ItemContainerStyle="{ThemeResource NexReferenceItemStyle}" SelectionMode="Single" AllowDrop="True" DragOver="Items_DragOver" Drop="Items_Drop" RightTapped="Items_RightTapped" DoubleTapped="Items_DoubleTapped" KeyDown="Items_KeyDown" />
