@@ -18,6 +18,12 @@ public sealed partial class ReferenceTile : UserControl
         Unloaded += (_, _) => CancelIcon();
     }
 
+    // System resources have no Shell thumbnail; give the known ones a meaningful glyph.
+    private static string SystemGlyph(string target) => target.ToLowerInvariant() switch
+    {
+        "shell:downloads" => "", "shell:desktop" => "", "shell:mycomputerfolder" => "",
+        "shell:appsfolder" => "", "ms-settings:" => "", "control:" => "", _ => ""
+    };
     private void CancelIcon() { _lifetime?.Cancel(); _lifetime?.Dispose(); _lifetime = null; NativeIcon.Source = null; }
     private async void BindItem()
     {
@@ -33,7 +39,7 @@ public sealed partial class ReferenceTile : UserControl
         NameLabel.TextAlignment = grid ? TextAlignment.Center : TextAlignment.Left;
         IconHost.Width = IconHost.Height = grid ? 40 : 28;
         ErrorLabel.Visibility = item.Status.Exists ? Visibility.Collapsed : Visibility.Visible;
-        FallbackIcon.Glyph = item.Reference.Kind switch { ContainerItemKind.Folder => "\uE8B7", ContainerItemKind.Application => "\uE71D", ContainerItemKind.Shortcut => "\uE8A7", ContainerItemKind.SystemResource => "\uE80F", _ => "\uE8A5" };
+        FallbackIcon.Glyph = item.Reference.Kind switch { ContainerItemKind.Folder => "\uE8B7", ContainerItemKind.Application => "\uE71D", ContainerItemKind.Shortcut => "\uE8A7", ContainerItemKind.SystemResource => SystemGlyph(item.Reference.Target), _ => "\uE8A5" };
         FallbackIcon.Visibility = Visibility.Visible;
         _lifetime = new CancellationTokenSource();
         var token = _lifetime.Token;

@@ -86,7 +86,10 @@ internal static class NexThemeManager
             Set(root, "NexOnAccentBrush", light ? "#F3F5F8" : "#12161B");
         }
         root.RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark;
-        root.CornerRadius = new CornerRadius(Current.CornerRadius);
+        // Window roots stay square: DWM rounds the window itself (an inner radius showed black wedges).
+        root.CornerRadius = new CornerRadius(0);
+        // Floating (borderless) surfaces: keep their residual DWM frame on the resolved theme.
+        if (window is not MainWindow) FloatingChrome.SetFrameDark(window, !light);
         if (window is MainWindow || !Current.UseMaterial || contrast || highContrast || !new global::Windows.UI.ViewManagement.UISettings().AdvancedEffectsEnabled)
         { window.SystemBackdrop = null; root.Background = Resolve(root, "NexSolidSurfaceBrush"); }
         else { NexGlassWindow.Apply(window, root); }

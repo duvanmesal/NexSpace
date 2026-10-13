@@ -1,9 +1,9 @@
-namespace NexSpace.Domain;
+﻿namespace NexSpace.Domain;
 
 /// <summary>Collapsed height is presentation only; never overwrite the expanded size.</summary>
 public static class ContainerGeometry
 {
-    public const int CollapsedHeight = 114;
+    public const int CollapsedHeight = 60;   // header-only floating card; includes the borderless frame's residual top band
     public const int MinimumWidth = 320;
     public const int MinimumExpandedHeight = 220;
     public const int MaximumDimension = 16384;

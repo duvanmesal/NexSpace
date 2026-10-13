@@ -11,8 +11,9 @@ public static class DockPlacementPolicy
         var vertical = IsVertical(settings);
         var size = Math.Clamp(settings.ItemSize, 32, 64);
         var cell = (vertical ? settings.ShowLabels ? 76 : 56 : settings.ShowLabels ? Math.Max(size + 28, 92) : size + 28) + Math.Clamp(settings.Spacing, 4, 20);
-        var length = Math.Clamp(categoryCount + 3, 4, 12) * cell + 24;
-        var cross = settings.ShowLabels ? size + 58 : size + 36;
+        // +64 / +44: the two group separators plus the borderless frame's edges (Concept C dock).
+        var length = Math.Clamp(categoryCount + 3, 4, 12) * cell + 64;
+        var cross = settings.ShowLabels ? size + 66 : size + 44;
         var width = Math.Min(display.WorkWidth, (int)Math.Round((vertical ? Math.Max(cross, 112) : length) * scale));
         var height = Math.Min(display.WorkHeight, (int)Math.Round((vertical ? length + 20 : cross) * scale));
         var margin = (int)Math.Round(12 * scale);

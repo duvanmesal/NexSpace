@@ -22,7 +22,9 @@ internal sealed class NexGlassBackdrop(Grid surface) : SystemBackdrop
             {
                 Kind = DesktopAcrylicKind.Thin,
                 TintColor = solid,
-                TintOpacity = (float)NexThemeManager.Current.Opacity,
+                // Concept C glass: the wallpaper must read through the card. Density 0.65..1 maps
+                // to tint 0.30..0.80 (default 0.85 -> ~0.59), so the setting keeps its meaning.
+                TintOpacity = (float)(0.30 + (NexThemeManager.Current.Opacity - 0.65) / 0.35 * 0.50),
                 LuminosityOpacity = (float)(double)resources["NexGlassLuminosityOpacity"],
                 FallbackColor = solid
             };

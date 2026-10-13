@@ -16,6 +16,19 @@ public sealed record NexWorkspace(long Revision, DockSettings Dock, SessionPrefe
     public static NexWorkspace Empty => new(0, new(DockEdge.Bottom, "", 100, 100, 44, "blue-hour", true), new(true, true, []), []);
 }
 
+/// <summary>Segoe Fluent glyphs a dock category may use. The first four are the original set
+/// (kept so existing workspaces stay valid); the rest give Concept C's dock its vocabulary.</summary>
+public static class DockGlyphs
+{
+    public static readonly IReadOnlyList<(string Glyph, string Label)> All =
+    [
+        ("", "Carpeta"), ("", "Aplicaciones"), ("", "Escritorio"), ("", "Herramientas"),
+        ("", "Juegos"), ("", "Web"), ("", "Cuadrícula"), ("", "Música"),
+        ("", "Imágenes"), ("", "Descargas"), ("", "Documentos"),
+    ];
+    public static bool IsAllowed(string? glyph) => glyph is not null && All.Any(g => g.Glyph == glyph);
+}
+
 public static class WorkspaceRules
 {
     public static NexWorkspace Validate(NexWorkspace workspace)
@@ -36,7 +49,7 @@ public static class WorkspaceRules
         {
             if (category.Id == Guid.Empty || category.Items is null || category.Items.Count > 1000 || !names.Add(ContainerRules.NormalizeName(category.Name)))
                 throw new ArgumentException("Categoría no válida o nombre duplicado.");
-            if (category.Glyph is not ("\uE8B7" or "\uE71D" or "\uE7F4" or "\uE713")) throw new ArgumentException("Icono no válido.");
+            if (!DockGlyphs.IsAllowed(category.Glyph)) throw new ArgumentException("Icono no válido.");
             if (category.ContainerId is not null && category.Items.Count != 0) throw new ArgumentException("Una categoría enlazada no duplica referencias.");
             if (category.Items.Select(i => i.TargetKey).Distinct().Count() != category.Items.Count || category.Items.Select(i => i.Id).Distinct().Count() != category.Items.Count)
                 throw new ArgumentException("Referencias duplicadas.");

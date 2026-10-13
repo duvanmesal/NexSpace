@@ -30,6 +30,7 @@ public sealed partial class ContainerWindow : Window
     private global::Windows.Graphics.PointInt32 _lockedPosition;
     public event Action? ContainerChanged;
     private readonly DispatcherQueueTimer _placementSaveTimer;
+    private readonly FloatingChrome _chrome;
     private readonly JsonEventLog _log = new();
 
     public ContainerWindow(Guid containerId, ContainerService service, IContainerItemPlatformService platform)
@@ -55,6 +56,10 @@ public sealed partial class ContainerWindow : Window
         // re-enable without a validated fix — coordinate with the native-stability work first.
         Root.RowDefinitions[0].Height = new GridLength(0);
         DragRegion.Visibility = Visibility.Collapsed;
+        // Concept C: hide the system caption via the presenter (no caption colours) and move the
+        // window from the app-drawn header. Close/collapse live in the header and Options menu.
+        _chrome = new FloatingChrome(this, Header, ResizeGrip, () => !_container.IsPositionLocked,
+            new global::Windows.Graphics.SizeInt32(ContainerGeometry.MinimumWidth, ContainerGeometry.MinimumExpandedHeight));
         var displays = new WindowsDisplayService().GetDisplays();
         var display = displays.FirstOrDefault(candidate => candidate.Key == _container.Placement.MonitorKey) ?? displays.FirstOrDefault(candidate => candidate.IsPrimary) ?? displays.FirstOrDefault();
         if (display is not null)
@@ -69,7 +74,7 @@ public sealed partial class ContainerWindow : Window
         RefreshItems();
         AppWindow.Closing += WindowClosing;
         AppWindow.Changed += WindowChanged;
-        Closed += (_, _) => { _closed = true; _placementSaveTimer.Stop(); _placementSaveTimer.Tick -= PlacementTimerTick; AppWindow.Closing -= WindowClosing; AppWindow.Changed -= WindowChanged; ContainerChanged = null; ItemsView.ItemsSource = null; SystemBackdrop = null; Content = null; };
+        Closed += (_, _) => { _closed = true; _chrome.Dispose(); _placementSaveTimer.Stop(); _placementSaveTimer.Tick -= PlacementTimerTick; AppWindow.Closing -= WindowClosing; AppWindow.Changed -= WindowChanged; ContainerChanged = null; ItemsView.ItemsSource = null; SystemBackdrop = null; Content = null; };
         if (new global::Windows.UI.ViewManagement.UISettings().AnimationsEnabled)
             ContentArea.Transitions = new TransitionCollection { new EntranceThemeTransition() };
     }
@@ -118,9 +123,12 @@ public sealed partial class ContainerWindow : Window
         _container = ViewModel.Snapshot;
         Title = _container.Name;
         CollapseIcon.Glyph = _container.IsCollapsed ? "\uE70D" : "\uE70E";
+        ContainerIcon.Glyph = GroupGlyph(_container.Name);
         Root.RowDefinitions[2].Height = _container.IsCollapsed ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         ContentArea.Visibility = _container.IsCollapsed ? Visibility.Collapsed : Visibility.Visible;
         StatusText.Visibility = _container.IsCollapsed ? Visibility.Collapsed : Visibility.Visible;
+        ResizeGrip.Visibility = StatusText.Visibility;
+        Root.RowSpacing = _container.IsCollapsed ? 0 : 8;   // collapsed card is exactly header-high
         EmptyState.Visibility = _container.IsCollapsed || _container.Items.Count != 0 ? Visibility.Collapsed : Visibility.Visible;
         _refreshing = true;
         try
@@ -140,6 +148,18 @@ public sealed partial class ContainerWindow : Window
         }
         finally { _refreshing = false; }
         ContainerChanged?.Invoke();
+    }
+
+    // Presentation-only identity glyph until containers persist their own (Concept C groups).
+    private static string GroupGlyph(string name)
+    {
+        var n = name.ToLowerInvariant();
+        if (n.Contains("juego") || n.Contains("game")) return "";
+        if (n.Contains("aplic") || n.Contains("app") || n.Contains("program")) return "";
+        if (n.Contains("web") || n.Contains("internet") || n.Contains("naveg")) return "";
+        if (n.Contains("foto") || n.Contains("imagen")) return "";
+        if (n.Contains("músic") || n.Contains("music")) return "";
+        return "";
     }
 
     private void Collapse_Click(object sender, RoutedEventArgs e) => ApplyPresentation(collapsed: !_container.IsCollapsed);
@@ -306,6 +326,8 @@ public sealed partial class ContainerWindow : Window
             _lockedPosition = AppWindow.Position;
             RefreshItems();
         }));
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(Menu("Cerrar contenedor", Close));
         menu.ShowAt((FrameworkElement)sender);
     }
 

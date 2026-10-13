@@ -18,7 +18,7 @@ internal sealed class DockWindow : Window
     private readonly WorkspaceViewModel _viewModel;
     private readonly Action<Guid?> _showManager;
     private readonly Action _recover;
-    private readonly Grid _root = new() { BorderThickness = new Thickness(1), RowDefinitions = { new() { Height = new GridLength(9) }, new() } };
+    private readonly Grid _root = new() { BorderThickness = new Thickness(0), RowDefinitions = { new() { Height = new GridLength(9) }, new() } };
     private readonly StackPanel _buttons = new() { Spacing = 6, Margin = new Thickness(10, 1, 10, 9) };
     private readonly DispatcherQueueTimer _saveTimer;
     private readonly List<Flyout> _flyouts = [];
@@ -35,12 +35,15 @@ internal sealed class DockWindow : Window
         // keeps the dock a clean silhouette). The whole strip is the title-bar/drag region.
         var grip = new Grid(); _gripTitle.Foreground = Brush("NexSecondaryTextBrush"); grip.Children.Add(_gripTitle);
         _root.Children.Add(grip);
-        var scroll = new ScrollViewer { Content = _buttons, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var scroll = new ScrollViewer { Content = _buttons, HorizontalScrollBarVisibility = ScrollBarVisibility.Hidden, VerticalScrollBarVisibility = ScrollBarVisibility.Hidden };
         Grid.SetRow(scroll, 1); _root.Children.Add(scroll);
         ExtendsContentIntoTitleBar = true; SetTitleBar(grip);
         AppWindow.TitleBar.ButtonForegroundColor = Microsoft.UI.Colors.White;
         AppWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
-        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter) { presenter.IsMaximizable = false; presenter.IsResizable = false; presenter.SetBorderAndTitleBar(false, false); }
+        if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter) { presenter.IsMaximizable = false; presenter.IsResizable = true; /* resizable frame = invisible side edges on Win11 (non-resizable leaves a light dialog rim); DockPlacementPolicy re-applies the size */ presenter.SetBorderAndTitleBar(false, false); }
+        // Measured: (false,false) is GDI-flat across window lifetimes; (true,false) leaks ~16 GDI
+        // objects per window. Rounded corners + quiet edge come from one-time DWM attributes.
+        FloatingChrome.ApplyGlassEdge(this);
         NexThemeManager.Register(this, _root);
         _saveTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
         _saveTimer.IsRepeating = false; _saveTimer.Interval = TimeSpan.FromMilliseconds(450);
@@ -87,7 +90,7 @@ internal sealed class DockWindow : Window
             _layoutKey = key; ClearButtons();
             _buttons.Orientation = DockPlacementPolicy.IsVertical(state.Dock) ? Orientation.Vertical : Orientation.Horizontal;
             _buttons.Spacing = state.Dock.Spacing;
-            _buttons.HorizontalAlignment = _buttons.Orientation == Orientation.Vertical ? HorizontalAlignment.Center : HorizontalAlignment.Left;
+            _buttons.HorizontalAlignment = HorizontalAlignment.Center;
             _gripTitle.Visibility = Visibility.Collapsed;
             _buttons.Children.Add(ActionButton("\uE80F", "Manager", () => _showManager(null)));
             _buttons.Children.Add(Separator());
@@ -122,11 +125,12 @@ internal sealed class DockWindow : Window
                 var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Foreground = Brush("NexWarningBrush") };
                 list.ItemClick += (_, args) => { if (args.ClickedItem is ContainerItemViewModel item) { _viewModel.Open(item.Reference); status.Text = _viewModel.Status; } };
                 content.Children.Add(list); content.Children.Add(status);
-                var flyout = new Flyout { Content = content, ShouldConstrainToRootBounds = false, Placement = state.Dock.Edge switch { DockEdge.Top => FlyoutPlacementMode.Bottom, DockEdge.Left => FlyoutPlacementMode.Right, DockEdge.Right => FlyoutPlacementMode.Left, _ => FlyoutPlacementMode.Top } };
+                var placement = state.Dock.Edge switch { DockEdge.Top => FlyoutPlacementMode.Bottom, DockEdge.Left => FlyoutPlacementMode.Right, DockEdge.Right => FlyoutPlacementMode.Left, _ => FlyoutPlacementMode.Top };
+                var flyout = new Flyout { Content = Popover(content, placement), ShouldConstrainToRootBounds = false, Placement = placement, FlyoutPresenterStyle = PopoverPresenterStyle };
                 button.Flyout = flyout; _flyouts.Add(flyout);
                 // Active-category glow (Concept C): underline the open category while its popover shows.
-                flyout.Opened += (_, _) => { if (button.Tag is Border g) g.Visibility = Visibility.Visible; };
-                flyout.Closed += (_, _) => { if (button.Tag is Border g) g.Visibility = Visibility.Collapsed; };
+                flyout.Opened += (_, _) => { if (button.Tag is Border g) g.Visibility = Visibility.Visible; button.Background = SelectedPill; };
+                flyout.Closed += (_, _) => { if (button.Tag is Border g) g.Visibility = Visibility.Collapsed; button.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent); };
                 var menu = new MenuFlyout(); var edit = new MenuFlyoutItem { Text = "Administrar categoría", Command = new SimpleCommand(() => _showManager(category.Id)) }; menu.Items.Add(edit);
                 menu.Items.Add(new MenuFlyoutItem { Text = "Recuperar ventanas", Command = new SimpleCommand(_recover) }); button.ContextFlyout = menu;
                 _buttons.Children.Add(button);
@@ -158,6 +162,37 @@ internal sealed class DockWindow : Window
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label); ToolTipService.SetToolTip(button, label);
         if (action is not null) button.Click += (_, _) => action(); return button;
     }
+    // Concept C popover: an app-drawn card with a tail pointing at the active dock icon. The flyout
+    // centres itself on its target, so a centred tail lands on the icon. Side docks get no tail.
+    private static Style? _popoverStyle;
+    private static Style PopoverPresenterStyle => _popoverStyle ??= CreatePopoverStyle();
+    private static Style CreatePopoverStyle()
+    {
+        var style = new Style(typeof(FlyoutPresenter));
+        style.Setters.Add(new Setter(Control.BackgroundProperty, new SolidColorBrush(Microsoft.UI.Colors.Transparent)));
+        style.Setters.Add(new Setter(Control.BorderThicknessProperty, new Thickness(0)));
+        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(0)));
+        style.Setters.Add(new Setter(Control.CornerRadiusProperty, new CornerRadius(0)));
+        style.Setters.Add(new Setter(FlyoutPresenter.IsDefaultShadowEnabledProperty, false));
+        style.Setters.Add(new Setter(FrameworkElement.MaxWidthProperty, 420d));
+        return style;
+    }
+    private FrameworkElement Popover(FrameworkElement content, FlyoutPlacementMode placement)
+    {
+        var card = new Border { Background = Brush("NexElevatedBrush"), BorderBrush = Brush("NexDividerBrush"), BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(12), Padding = new Thickness(12, 10, 12, 10), Child = content };
+        if (placement is not (FlyoutPlacementMode.Top or FlyoutPlacementMode.Bottom)) return card;
+        var down = placement == FlyoutPlacementMode.Top;   // popover above the dock -> tail points down
+        var tail = new Microsoft.UI.Xaml.Shapes.Polygon { Fill = Brush("NexElevatedBrush"), HorizontalAlignment = HorizontalAlignment.Center };
+        if (down) { tail.Points.Add(new(0, 0)); tail.Points.Add(new(18, 0)); tail.Points.Add(new(9, 9)); tail.Margin = new Thickness(0, -1, 0, 0); }
+        else { tail.Points.Add(new(0, 9)); tail.Points.Add(new(18, 9)); tail.Points.Add(new(9, 0)); tail.Margin = new Thickness(0, 0, 0, -1); }
+        var stack = new StackPanel { Padding = new Thickness(0, down ? 0 : 0, 0, down ? 4 : 0) };
+        if (down) { stack.Children.Add(card); stack.Children.Add(tail); } else { stack.Children.Add(tail); stack.Children.Add(card); }
+        return stack;
+    }
+
+    // Concept C selected item: a soft neutral pill behind the open category (plus its accent glow).
+    private static readonly SolidColorBrush SelectedPill = new(global::Windows.UI.Color.FromArgb(0x24, 0xFF, 0xFF, 0xFF));
     private Border Separator()
     {
         var vertical = _buttons.Orientation == Orientation.Vertical;

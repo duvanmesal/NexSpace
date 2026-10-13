@@ -35,7 +35,7 @@
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
     <x:Double x:Key="NexGlassTintOpacity">0.45</x:Double>
-    <x:Double x:Key="NexGlassLuminosityOpacity">0.65</x:Double>
+    <x:Double x:Key="NexGlassLuminosityOpacity">0.5</x:Double>
     <CornerRadius x:Key="NexPanelCornerRadius">12</CornerRadius>
     <Style x:Key="NexTitleStyle" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="Segoe UI Variable" /><Setter Property="FontSize" Value="16" />

@@ -22,9 +22,7 @@ internal static class ShellIconLoader
         try
         {
             token.ThrowIfCancellationRequested();
-            using var thumbnail = item.Kind == ContainerItemKind.Folder
-                ? await (await StorageFolder.GetFolderFromPathAsync(item.Target)).GetThumbnailAsync(ThumbnailMode.SingleItem, 48, ThumbnailOptions.UseCurrentScale)
-                : await (await StorageFile.GetFileFromPathAsync(item.Target)).GetThumbnailAsync(ThumbnailMode.SingleItem, 48, ThumbnailOptions.UseCurrentScale);
+            using var thumbnail = await ThumbnailWithRetryAsync(item, token);
             token.ThrowIfCancellationRequested();
             if (thumbnail is null) return null;
             var image = new BitmapImage();
@@ -36,5 +34,24 @@ internal static class ShellIconLoader
             return image;
         }
         finally { Slots.Release(); }
+    }
+
+    // The Shell thumbnail provider intermittently fails when several icons load at once (siblings
+    // succeed while one returns null/throws). One bounded retry removes most generic fallbacks;
+    // a persistent failure still leaves the system glyph.
+    private static async Task<StorageItemThumbnail?> ThumbnailWithRetryAsync(ContainerItemReference item, CancellationToken token)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                var thumbnail = item.Kind == ContainerItemKind.Folder
+                    ? await (await StorageFolder.GetFolderFromPathAsync(item.Target)).GetThumbnailAsync(ThumbnailMode.SingleItem, 48, ThumbnailOptions.UseCurrentScale)
+                    : await (await StorageFile.GetFileFromPathAsync(item.Target)).GetThumbnailAsync(ThumbnailMode.SingleItem, 48, ThumbnailOptions.UseCurrentScale);
+                if (thumbnail is not null || attempt == 1) return thumbnail;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException && attempt == 0) { }
+            await Task.Delay(180, token);
+        }
     }
 }

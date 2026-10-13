@@ -119,8 +119,8 @@ public sealed partial class MainPage : Page
     {
         if (Category is not { } c) { ViewModel.Report("Selecciona una categoría."); return; }
         var name = new TextBox { Header = "Nombre", Text = c.Name, MaxLength = 64 };
-        var icons = new[] { "\uE8B7", "\uE71D", "\uE7F4", "\uE713" };
-        var glyph = new ComboBox { Header = "Icono", ItemsSource = new[] { "Carpeta", "Aplicaciones", "Juegos", "Herramientas" }, SelectedIndex = Array.IndexOf(icons, c.Glyph) };
+        var icons = DockGlyphs.All.Select(g => g.Glyph).ToArray();
+        var glyph = new ComboBox { Header = "Icono", ItemsSource = DockGlyphs.All.Select(g => g.Label).ToArray(), SelectedIndex = Array.IndexOf(icons, c.Glyph) };
         var link = new ComboBox { Header = "Contenido (sin duplicar referencias)", HorizontalAlignment = HorizontalAlignment.Stretch };
         link.Items.Add(new ComboBoxItem { Content = "Referencias propias" });
         foreach (var container in ViewModel.Containers) link.Items.Add(new ComboBoxItem { Content = container.Name, Tag = container.Id });
