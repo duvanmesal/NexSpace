@@ -97,18 +97,26 @@ reabrir un contenedor.
     título» está activado en el equipo de prueba (`ColorPrevalence=1`).
   - Solo se corrige con `DWMWA_CAPTION_COLOR` (prohibido) o subclasificando `WM_NCCALCSIZE` (Ruta 4).
   - En ventanas inactivas no aparece.
-- **Translucidez no evaluada (BLOCKED).** «Efectos de transparencia» está desactivado en el equipo
-  (`EnableTransparency=0`). La app cae correctamente a superficie sólida, pero no se cambió el ajuste
-  global sin autorización.
+- **Translucidez: PASS (2026-10-13), validada con autorización.** Se activó temporalmente
+  «Efectos de transparencia» y después se restauró a su valor original (`EnableTransparency=0`).
+  - Hallazgo: `GetDefaultSystemBackdropConfiguration` sigue la activación, así que el acrílico volvía
+    al color sólido en cuanto la ventana flotante perdía el foco; en la práctica no se veía nunca.
+  - Corrección: `NexGlassBackdrop` usa una `SystemBackdropConfiguration` propia con
+    `IsInputActive = true` y el tema resuelto.
+  - Medido con transparencia activa, 60 ciclos cada uno: L (corrección) y M (configuración por
+    defecto) dejan GDI plano en 85 y crecen igual en handles, unos +7 por ciclo frente a +3–4 con
+    superficie sólida. El sobrecoste viene del acrílico previo, no de la corrección. Queda en el
+    perfilado de Fase 4.
+  - El popover del dock sigue siendo una tarjeta opaca.
 - **Esquinas y sombra según DWM.** DWM solo ofrece tres radios (ninguno, pequeño, redondo); la sombra
   es la del sistema.
 - **Iconos `.lnk`.** No producen miniatura y caen al glifo genérico. Es una brecha de producto aparte.
 - Accesibilidad de arrastre y redimensión por teclado: NOT_TESTED.
 - DPI ≠ 100 % y multimonitor: NOT_TESTED.
 
-## Validación pendiente (humana)
+## Validación humana (2026-10-13)
 
-- Arrastrar y redimensionar con ratón físico. Con entrada sintética relativa ya pasa: +100/+80 exacto
-  y mínimo de 320×220 respetado.
-- Observar la franja superior con «color de énfasis en barras de título» desactivado.
-- Con autorización explícita, activar temporalmente la transparencia para evaluar el material.
+- Arrastre y redimensión con ratón físico: PASS (reportado por el usuario).
+- Franja superior con «color de énfasis en barras de título» desactivado: PASS (reportado por el usuario).
+- Material translúcido con la transparencia activada: PASS tras la corrección descrita arriba
+  (capturas reales).

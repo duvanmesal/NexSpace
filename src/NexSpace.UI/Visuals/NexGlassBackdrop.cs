@@ -28,7 +28,15 @@ internal sealed class NexGlassBackdrop(Grid surface) : SystemBackdrop
                 LuminosityOpacity = (float)(double)resources["NexGlassLuminosityOpacity"],
                 FallbackColor = solid
             };
-            _controller.SetSystemBackdropConfiguration(GetDefaultSystemBackdropConfiguration(connectedTarget, xamlRoot));
+            // Floating surfaces are rarely the foreground window; the default configuration tracks
+            // activation and drops inactive windows to the solid fallback, so the glass was never
+            // seen. Keep it input-active; the theme follows the resolved NexSpace theme (reapplied
+            // by NexThemeManager, which reconnects a new backdrop on every change).
+            _controller.SetSystemBackdropConfiguration(new SystemBackdropConfiguration
+            {
+                IsInputActive = true,
+                Theme = surface.ActualTheme == ElementTheme.Light ? SystemBackdropTheme.Light : SystemBackdropTheme.Dark
+            });
             _controller.AddSystemBackdropTarget(connectedTarget);
         }
         catch (Exception ex)
