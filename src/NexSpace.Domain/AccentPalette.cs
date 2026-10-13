@@ -10,8 +10,8 @@ public static class AccentPalette
     private const double MinContrast = 4.5; // WCAG AA for text-sized content — NexSeaBrush is also used as text foreground (e.g. the "Abrir" chip).
     private const double MinSaturationForAccent = 0.08; // Below this the hue is too weak to read as "the user's accent" — use the safe fallback instead of a muddy gray.
 
-    public const string FallbackOnLight = "#1E7A63"; // NexSpace's own sea-glass dark-on-light default.
-    public const string FallbackOnDark = "#86C9B5";   // NexSpace's own sea-glass light-on-dark default.
+    public const string FallbackOnLight = "#2A6BB0"; // NexSpace's own blue-hour dark-on-light default.
+    public const string FallbackOnDark = "#7FB2EA";   // NexSpace's own blue-hour light-on-dark default.
 
     /// <summary>
     /// Returns a hex color derived from the given accent RGB, hue-preserving, with lightness
@@ -22,7 +22,7 @@ public static class AccentPalette
     /// </summary>
     public static string DeriveAccentHex(byte r, byte g, byte b, bool forLightSurface)
     {
-        var backgroundHex = forLightSurface ? "#F6F1EC" : "#201C1A";
+        var backgroundHex = forLightSurface ? "#F3F5F8" : "#16181C";
         var (h, s, _) = RgbToHsl(r, g, b);
         if (s < MinSaturationForAccent) return forLightSurface ? FallbackOnLight : FallbackOnDark;
 

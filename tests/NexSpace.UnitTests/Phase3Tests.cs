@@ -23,7 +23,7 @@ public sealed class Phase3Tests
     }
     [Fact] public void Old_workspace_defaults_remain_accessible()
     {
-        var w = WorkspaceRules.Validate(NexWorkspace.Empty); Assert.True(w.Dock.ShowLabels); Assert.Equal(DockOrientation.Automatic, w.Dock.Orientation); Assert.True(w.Session.ShowManagerOnStartup);
+        var w = WorkspaceRules.Validate(NexWorkspace.Empty); Assert.False(w.Dock.ShowLabels); Assert.Equal(DockOrientation.Automatic, w.Dock.Orientation); Assert.True(w.Session.ShowManagerOnStartup);
         Assert.Throws<ArgumentException>(() => WorkspaceRules.Validate(w with { Dock = w.Dock with { Orientation = (DockOrientation)99 } }));
     }
     [Theory] [InlineData(DockOrientation.Horizontal, false)] [InlineData(DockOrientation.Vertical, true)]

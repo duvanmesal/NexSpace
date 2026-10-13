@@ -17,21 +17,21 @@
             <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Default">
-    <!-- Studio direction warm defaults; NexThemeManager re-applies these live per preset/accent. -->
-    <SolidColorBrush x:Key="NexSurfaceBrush" Color="#301A1512" />
-    <SolidColorBrush x:Key="NexSolidSurfaceBrush" Color="#201C1A" />
-    <SolidColorBrush x:Key="NexElevatedBrush" Color="#322824" />
-    <SolidColorBrush x:Key="NexDividerBrush" Color="#7E6A5A" />
-    <SolidColorBrush x:Key="NexTextBrush" Color="#F3ECE6" />
-    <SolidColorBrush x:Key="NexSecondaryTextBrush" Color="#B29E92" />
+    <!-- Concept C direction cool defaults; NexThemeManager re-applies these live per preset/accent. -->
+    <SolidColorBrush x:Key="NexSurfaceBrush" Color="#2E14161A" />
+    <SolidColorBrush x:Key="NexSolidSurfaceBrush" Color="#16181C" />
+    <SolidColorBrush x:Key="NexElevatedBrush" Color="#20242A" />
+    <SolidColorBrush x:Key="NexDividerBrush" Color="#39404A" />
+    <SolidColorBrush x:Key="NexTextBrush" Color="#F2F4F7" />
+    <SolidColorBrush x:Key="NexSecondaryTextBrush" Color="#AEB6C0" />
     <SolidColorBrush x:Key="NexWarningBrush" Color="#F1C58D" />
-    <SolidColorBrush x:Key="NexSeaBrush" Color="#E0A07E" />
-    <SolidColorBrush x:Key="NexBlueBrush" Color="#8FB4DE" />
-    <SolidColorBrush x:Key="NexCopperBrush" Color="#E0A07E" />
-    <SolidColorBrush x:Key="NexOnAccentBrush" Color="#201C1A" />
-    <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#22FFFFFF" />
-    <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#3BE0A07E" />
-    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#4CE0A07E" />
+    <SolidColorBrush x:Key="NexSeaBrush" Color="#7FB2EA" />
+    <SolidColorBrush x:Key="NexBlueBrush" Color="#7FB2EA" />
+    <SolidColorBrush x:Key="NexCopperBrush" Color="#DEA78E" />
+    <SolidColorBrush x:Key="NexOnAccentBrush" Color="#12161B" />
+    <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#1AFFFFFF" />
+    <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#337FB2EA" />
+    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#447FB2EA" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
     <x:Double x:Key="NexGlassTintOpacity">0.45</x:Double>

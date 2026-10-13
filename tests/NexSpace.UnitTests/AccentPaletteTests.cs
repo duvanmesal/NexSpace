@@ -22,7 +22,7 @@ public sealed class AccentPaletteTests
         foreach (var forLight in new[] { true, false })
         {
             var hex = AccentPalette.DeriveAccentHex(r, g, b, forLight);
-            var (br, bg, bb) = forLight ? ((byte)0xF6, (byte)0xF1, (byte)0xEC) : ((byte)0x20, (byte)0x1C, (byte)0x1A);
+            var (br, bg, bb) = forLight ? ((byte)0xF3, (byte)0xF5, (byte)0xF8) : ((byte)0x16, (byte)0x18, (byte)0x1C);
             var (ar, ag, ab) = FromHex(hex);
             var ratio = AccentPalette.ContrastRatio(ar, ag, ab, br, bg, bb);
             Assert.True(ratio >= 4.5, $"rgb({r},{g},{b}) forLight={forLight} -> {hex} only reached {ratio:0.00}:1");
@@ -44,9 +44,9 @@ public sealed class AccentPaletteTests
     public void Fallback_colors_themselves_clear_wcag_aa()
     {
         var (lr, lg, lb) = FromHex(AccentPalette.FallbackOnLight);
-        Assert.True(AccentPalette.ContrastRatio(lr, lg, lb, 0xF6, 0xF1, 0xEC) >= 4.5);
+        Assert.True(AccentPalette.ContrastRatio(lr, lg, lb, 0xF3, 0xF5, 0xF8) >= 4.5);
         var (dr, dg, db) = FromHex(AccentPalette.FallbackOnDark);
-        Assert.True(AccentPalette.ContrastRatio(dr, dg, db, 0x20, 0x1C, 0x1A) >= 4.5);
+        Assert.True(AccentPalette.ContrastRatio(dr, dg, db, 0x16, 0x18, 0x1C) >= 4.5);
     }
 
     [Fact]

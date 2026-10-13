@@ -67,23 +67,23 @@ internal static class NexThemeManager
         }
         var light = preset == ThemePreset.Light;
         var contrast = preset == ThemePreset.Contrast;
-        // Studio direction: warm charcoal / warm paper grounds with copper as the brand accent
-        // and sea-glass as the cool counterpoint. All text pairs verified at WCAG AA, dividers
-        // at the non-text 3:1 minimum (see NexGlassContrastTests).
-        var background = light ? "#F6F1EC" : contrast ? "#000000" : preset == ThemePreset.Minimal ? "#16110E" : "#201C1A";
-        var text = light ? "#201C1A" : "#F3ECE6";
-        var secondary = light ? "#6A5B50" : contrast ? "#FFFFFF" : "#B29E92";
-        var accent = contrast ? "#FFFF64" : liveAccentHex ?? accentKey switch { "copper" => light ? "#9A4A28" : "#E0A07E", "blue-hour" => light ? "#1C5A8F" : "#8FB4DE", _ => light ? "#1E7A63" : "#86C9B5" };
+        // Concept C direction: cool near-black translucent glass (dark) / cool paper (light), near
+        // monochrome with a discreet cool accent (blue by default, matching C's dock glow). Text
+        // pairs verified at WCAG AA; dividers are intentionally subtle decorative glass hairlines.
+        var background = light ? "#F3F5F8" : contrast ? "#000000" : preset == ThemePreset.Minimal ? "#121316" : "#16181C";
+        var text = light ? "#1A1E24" : "#F2F4F7";
+        var secondary = light ? "#5A636E" : contrast ? "#FFFFFF" : "#AEB6C0";
+        var accent = contrast ? "#FFFF64" : liveAccentHex ?? accentKey switch { "copper" => light ? "#9A4A28" : "#DEA78E", "blue-hour" => light ? "#2A6BB0" : "#7FB2EA", _ => light ? "#1E7A63" : "#92CDBB" };
         if (!highContrast)
         {
             Set(root, "NexSolidSurfaceBrush", background); Set(root, "NexTextBrush", text); Set(root, "NexSecondaryTextBrush", secondary);
-            Set(root, "NexElevatedBrush", light ? "#EAE2D8" : contrast ? "#111111" : "#322824");
-            Set(root, "NexDividerBrush", light ? "#948374" : contrast ? "#FFFFFF" : "#7E6A5A");
+            Set(root, "NexElevatedBrush", light ? "#E8ECF1" : contrast ? "#111111" : "#20242A");
+            Set(root, "NexDividerBrush", light ? "#D2D8E0" : contrast ? "#FFFFFF" : "#39404A");
             Set(root, "NexWarningBrush", light ? "#8A4B00" : "#F1C58D");
-            Set(root, "NexSeaBrush", accent); Set(root, "NexBlueBrush", contrast ? "#FFFF64" : light ? "#1C5A8F" : "#8FB4DE"); Set(root, "NexCopperBrush", contrast ? "#FFFF64" : light ? "#9A4A28" : "#E0A07E");
-            // Text/icon color that sits ON the accent fill (primary button). The accent flips
-            // dark-on-light vs light-on-dark per theme, so the on-accent color flips opposite.
-            Set(root, "NexOnAccentBrush", light ? "#F6F1EC" : "#201C1A");
+            Set(root, "NexSeaBrush", accent); Set(root, "NexBlueBrush", contrast ? "#FFFF64" : light ? "#2A6BB0" : "#7FB2EA"); Set(root, "NexCopperBrush", contrast ? "#FFFF64" : light ? "#9A4A28" : "#DEA78E");
+            // Text/icon color that sits ON the accent fill. The accent flips dark-on-light vs
+            // light-on-dark per theme, so the on-accent color flips opposite.
+            Set(root, "NexOnAccentBrush", light ? "#F3F5F8" : "#12161B");
         }
         root.RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark;
         root.CornerRadius = new CornerRadius(Current.CornerRadius);

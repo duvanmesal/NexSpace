@@ -5,14 +5,15 @@ public sealed record DockCategory(Guid Id, string Name, string Glyph, Guid? Cont
 public sealed record DockSettings(DockEdge Edge, string MonitorKey, double X, double Y, int ItemSize, string AccentKey, bool ShowOnStartup)
 {
     public DockOrientation Orientation { get; init; }
-    public bool ShowLabels { get; init; } = true;
+    // Concept C dock is icon-only (premium centered pill); labels remain available as an option.
+    public bool ShowLabels { get; init; } = false;
     public int Spacing { get; init; } = 8;
 }
 public sealed record SessionPreferences(bool RestoreContainers, bool ShowManagerOnStartup, IReadOnlyList<Guid> OpenContainers);
 public sealed record NexWorkspace(long Revision, DockSettings Dock, SessionPreferences Session, IReadOnlyList<DockCategory> Categories)
 {
     public ThemeSettings Theme { get; init; } = ThemeSettings.Default;
-    public static NexWorkspace Empty => new(0, new(DockEdge.Bottom, "", 100, 100, 44, "sea-glass", true), new(true, true, []), []);
+    public static NexWorkspace Empty => new(0, new(DockEdge.Bottom, "", 100, 100, 44, "blue-hour", true), new(true, true, []), []);
 }
 
 public static class WorkspaceRules

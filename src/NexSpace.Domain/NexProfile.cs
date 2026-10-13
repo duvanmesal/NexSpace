@@ -7,7 +7,7 @@ public enum ThemePreset { Dark, Light, Minimal, Contrast, Auto }
 public enum DockOrientation { Automatic, Horizontal, Vertical }
 public sealed record ThemeSettings(ThemePreset Preset, string Accent, double Opacity, int CornerRadius, int Spacing, string Font, bool UseMaterial)
 {
-    public static ThemeSettings Default => new(ThemePreset.Dark, "copper", .85, 12, 8, "Segoe UI Variable", true);
+    public static ThemeSettings Default => new(ThemePreset.Dark, "blue-hour", .85, 14, 8, "Segoe UI Variable", true);
     public static ThemeSettings Validate(ThemeSettings value)
     {
         if (!Enum.IsDefined(value.Preset) || !ContainerRules.IsAllowedAccent(value.Accent) || !double.IsFinite(value.Opacity) ||
