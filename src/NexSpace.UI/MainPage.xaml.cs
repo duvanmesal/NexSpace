@@ -70,6 +70,7 @@ public sealed partial class MainPage : Page
     {
         ContainersEmptyState.Visibility = ViewModel.Containers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         CategoriesEmptyState.Visibility = ViewModel.Categories.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateDashboard();
     }
     private void ShowManager(Guid? categoryId)
     {
