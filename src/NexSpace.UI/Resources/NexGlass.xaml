@@ -11,24 +11,27 @@
             <SolidColorBrush x:Key="NexSeaBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="NexBlueBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="NexCopperBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NexOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
             <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Default">
-    <SolidColorBrush x:Key="NexSurfaceBrush" Color="#30171E26" />
-    <SolidColorBrush x:Key="NexSolidSurfaceBrush" Color="#22272E" />
-    <SolidColorBrush x:Key="NexElevatedBrush" Color="#302F3943" />
-    <SolidColorBrush x:Key="NexDividerBrush" Color="#28FFFFFF" />
-    <SolidColorBrush x:Key="NexTextBrush" Color="#F2F5F7" />
-    <SolidColorBrush x:Key="NexSecondaryTextBrush" Color="#C2CAD2" />
+    <!-- Studio direction warm defaults; NexThemeManager re-applies these live per preset/accent. -->
+    <SolidColorBrush x:Key="NexSurfaceBrush" Color="#301A1512" />
+    <SolidColorBrush x:Key="NexSolidSurfaceBrush" Color="#201C1A" />
+    <SolidColorBrush x:Key="NexElevatedBrush" Color="#322824" />
+    <SolidColorBrush x:Key="NexDividerBrush" Color="#7E6A5A" />
+    <SolidColorBrush x:Key="NexTextBrush" Color="#F3ECE6" />
+    <SolidColorBrush x:Key="NexSecondaryTextBrush" Color="#B29E92" />
     <SolidColorBrush x:Key="NexWarningBrush" Color="#F1C58D" />
-    <SolidColorBrush x:Key="NexSeaBrush" Color="#92CDBB" />
-    <SolidColorBrush x:Key="NexBlueBrush" Color="#91BFE3" />
-    <SolidColorBrush x:Key="NexCopperBrush" Color="#DEA78E" />
-    <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#20FFFFFF" />
-    <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#355E8B81" />
-    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#456B9A8F" />
+    <SolidColorBrush x:Key="NexSeaBrush" Color="#E0A07E" />
+    <SolidColorBrush x:Key="NexBlueBrush" Color="#8FB4DE" />
+    <SolidColorBrush x:Key="NexCopperBrush" Color="#E0A07E" />
+    <SolidColorBrush x:Key="NexOnAccentBrush" Color="#201C1A" />
+    <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#22FFFFFF" />
+    <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#3BE0A07E" />
+    <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#4CE0A07E" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
     <x:Double x:Key="NexGlassTintOpacity">0.45</x:Double>
@@ -71,4 +74,34 @@
     <ItemsPanelTemplate x:Key="NexGridItemsPanel"><ItemsWrapGrid Orientation="Horizontal" ItemWidth="108" ItemHeight="112" /></ItemsPanelTemplate>
     <ItemsPanelTemplate x:Key="NexListItemsPanel"><ItemsStackPanel /></ItemsPanelTemplate>
     <DataTemplate x:Key="NexReferenceTemplate"><controls:ReferenceTile /></DataTemplate>
+
+    <!-- ===== Studio direction shared components ===== -->
+    <!-- Uppercase eyebrow / section label with letter-spacing. -->
+    <Style x:Key="NexEyebrowStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11.5" /><Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="CharacterSpacing" Value="90" /><Setter Property="Foreground" Value="{ThemeResource NexSecondaryTextBrush}" />
+    </Style>
+    <!-- Prominent primary action (filled accent). On-accent foreground flips with theme. -->
+    <Style x:Key="NexAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+        <Setter Property="Background" Value="{ThemeResource NexSeaBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource NexOnAccentBrush}" />
+        <Setter Property="BorderThickness" Value="0" /><Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="15,8" /><Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <!-- Editorial "now" panel: elevated card with a copper identity edge. -->
+    <Style x:Key="NexHeroPanelStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource NexElevatedBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NexDividerBrush}" /><Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{ThemeResource NexPanelCornerRadius}" />
+    </Style>
+    <!-- Dashboard metric tile. -->
+    <Style x:Key="NexStatTileStyle" TargetType="Border">
+        <Setter Property="Background" Value="{ThemeResource NexElevatedBrush}" />
+        <Setter Property="BorderBrush" Value="{ThemeResource NexDividerBrush}" /><Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="10" /><Setter Property="Padding" Value="15,13" />
+    </Style>
+    <Style x:Key="NexStatNumberStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="26" /><Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{ThemeResource NexTextBrush}" /><Setter Property="LineHeight" Value="28" />
+    </Style>
 </ResourceDictionary>

@@ -67,17 +67,23 @@ internal static class NexThemeManager
         }
         var light = preset == ThemePreset.Light;
         var contrast = preset == ThemePreset.Contrast;
-        var background = light ? "#F2F5F7" : contrast ? "#000000" : preset == ThemePreset.Minimal ? "#151719" : "#22272E";
-        var text = light ? "#18242E" : "#F2F5F7";
-        var secondary = light ? "#394C5B" : contrast ? "#FFFFFF" : "#C2CAD2";
-        var accent = contrast ? "#FFFF64" : liveAccentHex ?? accentKey switch { "copper" => light ? "#884326" : "#DEA78E", "blue-hour" => light ? "#185F99" : "#91BFE3", _ => light ? "#206856" : "#92CDBB" };
+        // Studio direction: warm charcoal / warm paper grounds with copper as the brand accent
+        // and sea-glass as the cool counterpoint. All text pairs verified at WCAG AA, dividers
+        // at the non-text 3:1 minimum (see NexGlassContrastTests).
+        var background = light ? "#F6F1EC" : contrast ? "#000000" : preset == ThemePreset.Minimal ? "#16110E" : "#201C1A";
+        var text = light ? "#201C1A" : "#F3ECE6";
+        var secondary = light ? "#6A5B50" : contrast ? "#FFFFFF" : "#B29E92";
+        var accent = contrast ? "#FFFF64" : liveAccentHex ?? accentKey switch { "copper" => light ? "#9A4A28" : "#E0A07E", "blue-hour" => light ? "#1C5A8F" : "#8FB4DE", _ => light ? "#1E7A63" : "#86C9B5" };
         if (!highContrast)
         {
             Set(root, "NexSolidSurfaceBrush", background); Set(root, "NexTextBrush", text); Set(root, "NexSecondaryTextBrush", secondary);
-            Set(root, "NexElevatedBrush", light ? "#E1E8ED" : contrast ? "#111111" : "#303943");
-            Set(root, "NexDividerBrush", light ? "#70808D" : contrast ? "#FFFFFF" : "#73818E");
+            Set(root, "NexElevatedBrush", light ? "#EAE2D8" : contrast ? "#111111" : "#322824");
+            Set(root, "NexDividerBrush", light ? "#948374" : contrast ? "#FFFFFF" : "#7E6A5A");
             Set(root, "NexWarningBrush", light ? "#8A4B00" : "#F1C58D");
-            Set(root, "NexSeaBrush", accent); Set(root, "NexBlueBrush", contrast ? "#FFFF64" : light ? "#185F99" : "#91BFE3"); Set(root, "NexCopperBrush", contrast ? "#FFFF64" : light ? "#884326" : "#DEA78E");
+            Set(root, "NexSeaBrush", accent); Set(root, "NexBlueBrush", contrast ? "#FFFF64" : light ? "#1C5A8F" : "#8FB4DE"); Set(root, "NexCopperBrush", contrast ? "#FFFF64" : light ? "#9A4A28" : "#E0A07E");
+            // Text/icon color that sits ON the accent fill (primary button). The accent flips
+            // dark-on-light vs light-on-dark per theme, so the on-accent color flips opposite.
+            Set(root, "NexOnAccentBrush", light ? "#F6F1EC" : "#201C1A");
         }
         root.RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark;
         root.CornerRadius = new CornerRadius(Current.CornerRadius);
@@ -92,6 +98,9 @@ internal static class NexThemeManager
     }
     private static void StyleTree(DependencyObject parent, bool highContrast, Brush foreground)
     {
+        // Icon elements own their glyph font and semantic color — never override them with the
+        // body font (that renders Segoe Fluent glyphs as missing-glyph boxes) or text color.
+        if (parent is IconElement) return;
         if (parent is TextBlock text) { text.FontFamily = new FontFamily(Current.Font); if (!highContrast) text.Foreground = foreground; }
         if (parent is Control control) { control.FontFamily = new FontFamily(Current.Font); if (!highContrast) control.Foreground = foreground; }
         if (parent is StackPanel stack && stack.Spacing > 0) stack.Spacing = Current.Spacing;

@@ -13,13 +13,14 @@ public sealed class NexGlassContrastTests
         (Convert.ToByte(hex.Substring(1, 2), 16), Convert.ToByte(hex.Substring(3, 2), 16), Convert.ToByte(hex.Substring(5, 2), 16));
 
     [Theory]
-    [InlineData("#C2CAD2", "#22272E")] // dark secondary text on dark surface
-    [InlineData("#394C5B", "#F2F5F7")] // light secondary text on light surface
-    [InlineData("#F2F5F7", "#22272E")] // dark primary text on dark surface
-    [InlineData("#18242E", "#F2F5F7")] // light primary text on light surface
-    [InlineData("#F1C58D", "#22272E")] // dark warning text on dark surface
-    [InlineData("#8A4B00", "#F2F5F7")] // light warning text on light surface
-    [InlineData("#C2CAD2", "#151719")] // secondary text on the Minimal preset's surface
+    [InlineData("#B29E92", "#201C1A")] // Studio dark secondary text on warm ground
+    [InlineData("#6A5B50", "#F6F1EC")] // Studio light secondary text on warm paper
+    [InlineData("#F3ECE6", "#201C1A")] // Studio dark primary text on warm ground
+    [InlineData("#201C1A", "#F6F1EC")] // Studio light primary text on warm paper
+    [InlineData("#F1C58D", "#201C1A")] // dark warning text on warm ground
+    [InlineData("#8A4B00", "#F6F1EC")] // light warning text on warm paper
+    [InlineData("#B29E92", "#16110E")] // secondary text on the Minimal preset's warm surface
+    [InlineData("#B29E92", "#322824")] // dark secondary text on warm card
     public void Fixed_text_colors_clear_wcag_aa_against_their_surface(string fg, string bg)
     {
         var (fr, fgc, fb) = Hex(fg);
@@ -29,12 +30,12 @@ public sealed class NexGlassContrastTests
     }
 
     [Theory]
-    [InlineData("#92CDBB", "#22272E")] // sea-glass accent text on dark surface (e.g. the "Abrir" chip)
-    [InlineData("#206856", "#F2F5F7")] // sea-glass accent text on light surface
-    [InlineData("#91BFE3", "#22272E")] // blue-hour accent text on dark surface
-    [InlineData("#185F99", "#F2F5F7")] // blue-hour accent text on light surface
-    [InlineData("#DEA78E", "#22272E")] // copper accent text on dark surface
-    [InlineData("#884326", "#F2F5F7")] // copper accent text on light surface
+    [InlineData("#86C9B5", "#201C1A")] // sea-glass accent text on warm dark (e.g. the "Abrir" chip)
+    [InlineData("#1E7A63", "#F6F1EC")] // sea-glass accent text on warm paper
+    [InlineData("#8FB4DE", "#201C1A")] // blue-hour accent text on warm dark
+    [InlineData("#1C5A8F", "#F6F1EC")] // blue-hour accent text on warm paper
+    [InlineData("#E0A07E", "#201C1A")] // copper accent text on warm dark
+    [InlineData("#9A4A28", "#F6F1EC")] // copper accent text on warm paper
     [InlineData("#FFFF64", "#000000")] // Contrast preset accent on its forced black surface
     public void Fixed_accent_colors_clear_wcag_aa_when_used_as_text(string fg, string bg)
     {
@@ -45,8 +46,8 @@ public sealed class NexGlassContrastTests
     }
 
     [Theory]
-    [InlineData("#73818E", "#22272E")] // dark divider (non-text, WCAG 1.4.11 minimum 3:1)
-    [InlineData("#70808D", "#F2F5F7")] // light divider
+    [InlineData("#7E6A5A", "#201C1A")] // Studio dark divider (non-text, WCAG 1.4.11 minimum 3:1)
+    [InlineData("#948374", "#F6F1EC")] // Studio light divider
     public void Fixed_non_text_dividers_clear_wcag_non_text_minimum(string fg, string bg)
     {
         var (fr, fgc, fb) = Hex(fg);
