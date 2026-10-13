@@ -32,6 +32,9 @@ internal sealed class DockWindow : Window
         _workspace = workspace; _viewModel = viewModel; _showManager = showManager; _recover = recover;
         Title = "NexSpace · NexDock"; Content = _root;
         var grip = new Grid(); _gripTitle.Foreground = Brush("NexSecondaryTextBrush"); grip.Children.Add(_gripTitle);
+        // Visual drag affordance: a small centered handle in the title/drag strip.
+        grip.Children.Add(new Border { Width = 26, Height = 3, CornerRadius = new CornerRadius(2), Background = Brush("NexDividerBrush"),
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 5, 0, 0) });
         _root.Children.Add(grip);
         var scroll = new ScrollViewer { Content = _buttons, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         Grid.SetRow(scroll, 1); _root.Children.Add(scroll);
@@ -88,9 +91,10 @@ internal sealed class DockWindow : Window
             _buttons.HorizontalAlignment = _buttons.Orientation == Orientation.Vertical ? HorizontalAlignment.Center : HorizontalAlignment.Left;
             _gripTitle.Visibility = Visibility.Collapsed;
             _buttons.Children.Add(ActionButton("\uE80F", "Manager", () => _showManager(null)));
+            _buttons.Children.Add(Separator());
             foreach (var category in state.Categories)
             {
-                var button = ActionButton(category.Glyph, category.Name, null);
+                var button = ActionButton(category.Glyph, category.Name, null, accentIcon: true, dotHex: WorkspaceColor.ForId(category.Id));
                 var content = new StackPanel { Spacing = 10, MinWidth = 280, MaxWidth = 380 };
                 content.Children.Add(new TextBlock { Text = category.Name, Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["NexTitleStyle"] });
                 var items = _viewModel.Items(category);
@@ -113,22 +117,41 @@ internal sealed class DockWindow : Window
                 menu.Items.Add(new MenuFlyoutItem { Text = "Recuperar ventanas", Command = new SimpleCommand(_recover) }); button.ContextFlyout = menu;
                 _buttons.Children.Add(button);
             }
-            if (state.Categories.Count == 0) _buttons.Children.Add(ActionButton("\uE710", "Añadir categoría", () => _showManager(Guid.Empty)));
+            if (state.Categories.Count == 0) _buttons.Children.Add(ActionButton("\uE710", "Añadir", () => _showManager(Guid.Empty), accentIcon: true));
+            _buttons.Children.Add(Separator());
             _buttons.Children.Add(ActionButton("\uE777", "Recuperar", _recover));
-            _buttons.Children.Add(ActionButton("\uE711", "Cerrar dock", Close));
+            _buttons.Children.Add(ActionButton("\uE711", "Cerrar", Close));
         }
         ApplyPlacement();
     }
-    private Button ActionButton(string glyph, string label, Action? action)
+    // Utility actions (Manager/Recuperar/Cerrar) use a neutral icon so the category buttons —
+    // which carry the accent and their identity dot — are what reads as the content of the dock.
+    private Button ActionButton(string glyph, string label, Action? action, bool accentIcon = false, string? dotHex = null)
     {
         var size = _viewModel.Snapshot.Dock.ItemSize;
-        var content = new StackPanel { Spacing = 5, Width = _viewModel.Snapshot.Dock.ShowLabels ? Math.Max(80, size + 16) : size + 16 };
-        content.Children.Add(new FontIcon { Glyph = glyph, FontSize = Math.Min(size, 28), Foreground = Brush(_viewModel.Snapshot.Dock.AccentKey switch { "copper" => "NexCopperBrush", "blue-hour" => "NexBlueBrush", _ => "NexSeaBrush" }) });
-        if (_viewModel.Snapshot.Dock.ShowLabels) content.Children.Add(new TextBlock { Text = label, FontSize = 11, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis });
-        var button = new Button { Content = content, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(8), Padding = new Thickness(6), MinHeight = _viewModel.Snapshot.Dock.ShowLabels ? 62 : 48 };
+        var showLabels = _viewModel.Snapshot.Dock.ShowLabels;
+        var iconBrush = accentIcon
+            ? Brush(_viewModel.Snapshot.Dock.AccentKey switch { "copper" => "NexCopperBrush", "blue-hour" => "NexBlueBrush", _ => "NexSeaBrush" })
+            : Brush("NexSecondaryTextBrush");
+        var iconHost = new Grid { Width = size, Height = size, HorizontalAlignment = HorizontalAlignment.Center };
+        iconHost.Children.Add(new FontIcon { Glyph = glyph, FontFamily = new FontFamily("Segoe Fluent Icons"), FontSize = Math.Min(size, 22), Foreground = iconBrush, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+        if (dotHex is not null)
+            iconHost.Children.Add(new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), Background = new SolidColorBrush(HexColor(dotHex)), HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 1, 1, 0) });
+        var content = new StackPanel { Spacing = 4, Width = showLabels ? Math.Max(72, size + 18) : size + 14, HorizontalAlignment = HorizontalAlignment.Center };
+        content.Children.Add(iconHost);
+        if (showLabels) content.Children.Add(new TextBlock { Text = label, FontSize = 11, TextAlignment = TextAlignment.Center, TextWrapping = TextWrapping.Wrap, MaxLines = 2, TextTrimming = TextTrimming.CharacterEllipsis });
+        var button = new Button { Content = content, Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent), BorderThickness = new Thickness(0), CornerRadius = new CornerRadius(9), Padding = new Thickness(5), MinHeight = showLabels ? 58 : 44 };
         Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label); ToolTipService.SetToolTip(button, label);
         if (action is not null) button.Click += (_, _) => action(); return button;
     }
+    private Border Separator()
+    {
+        var vertical = _buttons.Orientation == Orientation.Vertical;
+        return new Border { Background = Brush("NexDividerBrush"), Opacity = 0.7, CornerRadius = new CornerRadius(1),
+            Width = vertical ? 26 : 1, Height = vertical ? 1 : 26, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+    }
+    private static global::Windows.UI.Color HexColor(string hex) =>
+        global::Windows.UI.Color.FromArgb(255, Convert.ToByte(hex.Substring(1, 2), 16), Convert.ToByte(hex.Substring(3, 2), 16), Convert.ToByte(hex.Substring(5, 2), 16));
     private DisplayInfo? Display() { var d = new WindowsDisplayService().GetDisplays(); return d.FirstOrDefault(x => x.Key == _viewModel.Snapshot.Dock.MonitorKey) ?? d.FirstOrDefault(x => x.IsPrimary) ?? d.FirstOrDefault(); }
     private void ApplyPlacement()
     {

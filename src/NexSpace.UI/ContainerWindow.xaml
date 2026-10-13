@@ -3,7 +3,9 @@
         <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
         <Grid x:Name="DragRegion" Background="Transparent" Margin="0,0,140,0" />
         <Grid x:Name="Header" Grid.Row="1" ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="4" Height="36">
-            <FontIcon x:Name="ContainerIcon" Glyph="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="20" Foreground="{ThemeResource NexSeaBrush}" Margin="0,0,8,0" />
+            <Border Grid.Column="0" Width="30" Height="30" CornerRadius="8" Background="{ThemeResource ListViewItemBackgroundSelected}" Margin="0,0,10,0" VerticalAlignment="Center">
+                <FontIcon x:Name="ContainerIcon" Glyph="&#xE8B7;" FontFamily="Segoe Fluent Icons" FontSize="16" Foreground="{ThemeResource NexSeaBrush}" />
+            </Border>
             <TextBlock x:Name="TitleText" Grid.Column="1" Text="{Binding Name}" Style="{ThemeResource NexTitleStyle}" VerticalAlignment="Center" ToolTipService.ToolTip="{Binding Name}" />
             <Button Grid.Column="2" Style="{ThemeResource NexQuietButtonStyle}" AutomationProperties.Name="Añadir referencias" ToolTipService.ToolTip="Añadir referencias" Click="Add_Click"><FontIcon Glyph="&#xE710;" FontSize="14"/></Button>
             <Button Grid.Column="3" Style="{ThemeResource NexQuietButtonStyle}" AutomationProperties.Name="Vista y apariencia" ToolTipService.ToolTip="Vista y apariencia" Click="View_Click"><FontIcon Glyph="&#xE8A9;" FontSize="14"/></Button>
