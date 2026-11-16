@@ -7,6 +7,37 @@ namespace NexSpace.IntegrationTests;
 
 public sealed class ProfilePersistenceTests
 {
+    [Fact]
+    public void Profile_switch_restores_automatic_theme_and_linked_category_without_mixing_profiles()
+    {
+        using var scope = new IsolatedDirectory();
+        var db = Path.Combine(scope.Path, "profiles.db");
+        var containers = new ContainerService(new SqliteContainerRepository(db));
+        var container = containers.Create("Archivos").Value!;
+        var workspace = new SqliteWorkspaceRepository(db);
+        var profiles = new SqliteProfileRepository(db);
+        var original = profiles.Load().ActiveId;
+        var alternate = profiles.Create("Contraste", false);
+        var category = new DockCategory(Guid.NewGuid(), "Archivos", "\uE8F1", container.Id, []);
+        var automatic = ThemeSettings.Default with { Preset = ThemePreset.Auto, Accent = "copper" };
+        workspace.Save(NexWorkspace.Empty with { Theme = automatic, Categories = [category] });
+
+        profiles.Switch(alternate.Id);
+        Assert.Empty(containers.GetAll());
+        Assert.Empty(workspace.Load().Categories);
+        workspace.Save(workspace.Load() with { Theme = ThemeSettings.Default with { Preset = ThemePreset.Contrast } });
+
+        profiles.Switch(original);
+        var restored = new SqliteWorkspaceRepository(db).Load();
+        Assert.Equal(automatic, restored.Theme);
+        Assert.Equal(category.Id, Assert.Single(restored.Categories).Id);
+        Assert.Equal(container.Id, restored.Categories[0].ContainerId);
+        Assert.Equal(container.Id, Assert.Single(containers.GetAll()).Id);
+
+        profiles.Switch(alternate.Id);
+        Assert.Equal(ThemePreset.Contrast, workspace.Load().Theme.Preset);
+    }
+
     [Fact] public void Switch_duplicate_rename_delete_preserve_original_and_geometry()
     {
         using var scope = new IsolatedDirectory(); var db = Path.Combine(scope.Path, "profiles.db"); var original = Path.Combine(scope.Path,"original.txt"); File.WriteAllText(original,"Immutable");

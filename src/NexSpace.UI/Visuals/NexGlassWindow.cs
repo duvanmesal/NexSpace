@@ -8,7 +8,7 @@ namespace NexSpace.UI.Visuals;
 
 internal static class NexGlassWindow
 {
-    public static void Apply(Window window, Grid root)
+    public static void Apply(Window window, Grid root, bool light)
     {
         try
         {
@@ -19,13 +19,20 @@ internal static class NexGlassWindow
                 return;
             }
             if (!DesktopAcrylicController.IsSupported()) throw new NotSupportedException();
+            var theme = light ? SystemBackdropTheme.Light : SystemBackdropTheme.Dark;
+            if (window.SystemBackdrop is NexGlassBackdrop existing)
+            {
+                existing.Update(theme);
+                return;
+            }
             root.Background = (Brush)Microsoft.UI.Xaml.Application.Current.Resources["NexSurfaceBrush"];
-            window.SystemBackdrop = new NexGlassBackdrop(root);
+            window.SystemBackdrop = new NexGlassBackdrop(root, theme);
             var settings = new global::Windows.UI.ViewManagement.UISettings();
             new JsonEventLog().Write("nexglass-backdrop", $"Thin Acrylic requested; advancedEffects={settings.AdvancedEffectsEnabled}; animations={settings.AnimationsEnabled}; Windows controls policy fallback");
         }
         catch (Exception ex)
         {
+            window.SystemBackdrop = null;
             root.Background = (Brush)Microsoft.UI.Xaml.Application.Current.Resources["NexSolidSurfaceBrush"];
             new JsonEventLog().Write("nexglass-fallback", "Solid surface applied", ex.GetType().Name);
         }

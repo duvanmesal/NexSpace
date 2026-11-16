@@ -3,11 +3,11 @@ namespace NexSpace.Domain;
 public sealed record NexProfile(Guid Id, string Name);
 public sealed record ProfileState(Guid ActiveId, Guid DefaultId, bool RestoreLast, IReadOnlyList<NexProfile> Profiles);
 public sealed record ProfileSnapshot(IReadOnlyList<NexContainer> Containers, NexWorkspace Workspace);
-public enum ThemePreset { Dark, Light, Minimal, Contrast }
+public enum ThemePreset { Dark, Light, Minimal, Contrast, Auto }
 public enum DockOrientation { Automatic, Horizontal, Vertical }
 public sealed record ThemeSettings(ThemePreset Preset, string Accent, double Opacity, int CornerRadius, int Spacing, string Font, bool UseMaterial)
 {
-    public static ThemeSettings Default => new(ThemePreset.Dark, "sea-glass", .85, 12, 8, "Segoe UI Variable", true);
+    public static ThemeSettings Default => new(ThemePreset.Dark, "blue-hour", .85, 14, 8, "Segoe UI Variable", true);
     public static ThemeSettings Validate(ThemeSettings value)
     {
         if (!Enum.IsDefined(value.Preset) || !ContainerRules.IsAllowedAccent(value.Accent) || !double.IsFinite(value.Opacity) ||

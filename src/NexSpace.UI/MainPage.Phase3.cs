@@ -33,11 +33,21 @@ public sealed partial class MainPage
         var active = Profiles.Profiles.First(p => p.Id == Profiles.State.ActiveId);
         ActiveProfileText.Text = active.Name;
         ProfileStateText.Text = $"Activo: {active.Name} · Predeterminado: {Profiles.Profiles.First(p => p.Id == Profiles.State.DefaultId).Name}";
+        UpdateDashboard();
         _log.Write("profiles-bind-complete", "Apply active theme");
         if (App.MainWindow is { } manager) NexThemeManager.Register(manager, ManagerRoot);
         NexThemeManager.Apply(ViewModel.Snapshot.Theme);
         _log.Write("profiles-theme-complete", "Prepare tray");
         EnsureTray(); WindowsStartupText.Text = _startup.GetStatus().Message;
+    }
+    private void UpdateDashboard()
+    {
+        var containers = ViewModel.Containers.Count;
+        var categories = ViewModel.Categories.Count;
+        var references = ViewModel.Containers.Sum(c => c.Items.Count);
+        DashboardSummary.Text = containers == 0
+            ? "Aún no hay contenedores. Crea el primero y aparecerá flotando sobre el escritorio."
+            : $"{containers} contenedor{(containers == 1 ? "" : "es")} · {categories} categoría{(categories == 1 ? "" : "s")} · {references} referencia{(references == 1 ? "" : "s")}. Tus archivos originales permanecen intactos.";
     }
     private async Task ProfileAction(Action action)
     {
@@ -69,12 +79,20 @@ public sealed partial class MainPage
     private async void DefaultProfile_Click(object sender, RoutedEventArgs e) { if (ProfilesList.SelectedItem is NexProfile p) await ProfileAction(() => Profiles.SetStartup(p.Id, RestoreLastProfileBox.IsChecked == true)); }
     private void LoadAppearance()
     {
-        ThemeBox.ItemsSource = new[] { "NexGlass Dark", "NexGlass Light", "NexGlass Minimal", "NexGlass Contrast" };
+        ThemeBox.ItemsSource = new[] { "NexGlass Dark", "NexGlass Light", "NexGlass Minimal", "NexGlass Contrast", "Automático (Windows)" };
         ThemeAccentBox.ItemsSource = new[] { "Verde agua", "Azul", "Cobre" }; FontBox.ItemsSource = new[] { "Segoe UI Variable", "Segoe UI", "Arial" };
         OrientationBox.ItemsSource = new[] { "Automática por borde", "Horizontal", "Vertical" };
         var t = ViewModel.Snapshot.Theme; ThemeBox.SelectedIndex = (int)t.Preset; ThemeAccentBox.SelectedIndex = t.Accent switch { "blue-hour" => 1, "copper" => 2, _ => 0 };
         FontBox.SelectedItem = t.Font; OpacityBox.Value = t.Opacity; RadiusBox.Value = t.CornerRadius; ThemeSpacingBox.Value = t.Spacing; MaterialBox.IsChecked = t.UseMaterial;
         OrientationBox.SelectedIndex = (int)ViewModel.Snapshot.Dock.Orientation;
+        UpdateAutoThemeHint();
+    }
+    private void ThemeBox_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateAutoThemeHint();
+    private void UpdateAutoThemeHint()
+    {
+        var isAuto = (ThemePreset)Math.Max(0, ThemeBox.SelectedIndex) == ThemePreset.Auto;
+        ThemeAccentBox.IsEnabled = !isAuto;
+        AutoThemeHint.Visibility = isAuto ? Visibility.Visible : Visibility.Collapsed;
     }
     private void ApplyTheme_Click(object sender, RoutedEventArgs e)
     {

@@ -51,7 +51,7 @@ public sealed partial class MainPage : Page
             if (!ViewModel.Reload()) return;
             var startup = ViewModel.Snapshot;
             _log.Write("manager-workspace-loaded", "Loading settings controls");
-            Profiles.Reload(); LoadProfiles(); LoadSettings(); LoadAppearance(); UpdateDiagnostic();
+            Profiles.Reload(); LoadProfiles(); LoadSettings(); LoadAppearance(); UpdateDiagnostic(); UpdateEmptyStates();
             _log.Write("manager-settings-loaded", "Starting floating session");
             _windows.StartSession(startup);
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => StartupDiagnostics.Mark(_log, "manager-dispatch-ready"));
@@ -63,8 +63,14 @@ public sealed partial class MainPage : Page
     private void WorkspaceChanged()
     {
         if (_shuttingDown || _refreshing) return;
-        try { _refreshing = true; var id = _selectedCategory; ViewModel.Reload(); CategoriesList.SelectedItem = ViewModel.Categories.FirstOrDefault(c => c.Id == id); _selectedCategory = id; RefreshCategory(); _windows.Refresh(); Visuals.NexThemeManager.Apply(ViewModel.Snapshot.Theme); }
+        try { _refreshing = true; var id = _selectedCategory; ViewModel.Reload(); CategoriesList.SelectedItem = ViewModel.Categories.FirstOrDefault(c => c.Id == id); _selectedCategory = id; RefreshCategory(); _windows.Refresh(); Visuals.NexThemeManager.Apply(ViewModel.Snapshot.Theme); UpdateEmptyStates(); }
         finally { _refreshing = false; }
+    }
+    private void UpdateEmptyStates()
+    {
+        ContainersEmptyState.Visibility = ViewModel.Containers.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        CategoriesEmptyState.Visibility = ViewModel.Categories.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateDashboard();
     }
     private void ShowManager(Guid? categoryId)
     {
@@ -104,15 +110,17 @@ public sealed partial class MainPage : Page
     {
         var c = Category; CategoryTitle.Text = c?.Name ?? "Selecciona una categoría";
         CategoryHint.Text = c is null ? "Crea una categoría para añadir referencias." : c.ContainerId is null ? "Referencias propias; no se copian ni mueven archivos." : "Contenido enlazado en vivo. Edítalo en su contenedor; no se duplica.";
-        DockItemsList.ItemsSource = c is null ? Array.Empty<ContainerItemViewModel>() : ViewModel.Items(c);
+        var items = c is null ? Array.Empty<ContainerItemViewModel>() : ViewModel.Items(c);
+        DockItemsList.ItemsSource = items;
+        DockItemsEmptyState.Visibility = c is not null && items.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
     private async void CreateCategory_Click(object sender, RoutedEventArgs e) { var name = await Prompt("Nueva categoría", ""); if (name is null) return; var result = _workspace.AddCategory(name); Report(result); if (result.Succeeded) CategoriesList.SelectedItem = ViewModel.Categories.LastOrDefault(); }
     private async void EditCategory_Click(object sender, RoutedEventArgs e)
     {
         if (Category is not { } c) { ViewModel.Report("Selecciona una categoría."); return; }
         var name = new TextBox { Header = "Nombre", Text = c.Name, MaxLength = 64 };
-        var icons = new[] { "\uE8B7", "\uE71D", "\uE7F4", "\uE713" };
-        var glyph = new ComboBox { Header = "Icono", ItemsSource = new[] { "Carpeta", "Aplicaciones", "Juegos", "Herramientas" }, SelectedIndex = Array.IndexOf(icons, c.Glyph) };
+        var icons = DockGlyphs.All.Select(g => g.Glyph).ToArray();
+        var glyph = new ComboBox { Header = "Icono", ItemsSource = DockGlyphs.All.Select(g => g.Label).ToArray(), SelectedIndex = Array.IndexOf(icons, c.Glyph) };
         var link = new ComboBox { Header = "Contenido (sin duplicar referencias)", HorizontalAlignment = HorizontalAlignment.Stretch };
         link.Items.Add(new ComboBoxItem { Content = "Referencias propias" });
         foreach (var container in ViewModel.Containers) link.Items.Add(new ComboBoxItem { Content = container.Name, Tag = container.Id });

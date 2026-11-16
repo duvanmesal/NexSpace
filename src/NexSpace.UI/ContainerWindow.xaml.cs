@@ -30,6 +30,8 @@ public sealed partial class ContainerWindow : Window
     private global::Windows.Graphics.PointInt32 _lockedPosition;
     public event Action? ContainerChanged;
     private readonly DeferredAction? _placementSaveTimer;
+    private readonly FloatingChrome? _chrome;
+    private readonly bool _legacyTitleBar;
     private readonly JsonEventLog _log = new();
 
     public ContainerWindow(Guid containerId, ContainerService service, IContainerItemPlatformService platform)
@@ -44,7 +46,7 @@ public sealed partial class ContainerWindow : Window
             Root = new Grid();
             for (var i = 0; i < 4; i++) Root.RowDefinitions.Add(new RowDefinition());
             DragRegion = new Grid(); Header = new Grid(); ContentArea = new Grid();
-            ItemsView = new ListView(); EmptyState = new StackPanel();
+            ItemsView = new ListView(); EmptyState = new StackPanel(); ResizeGrip = new Grid();
             TitleText = new TextBlock(); StatusText = new TextBlock();
             ContainerIcon = new FontIcon(); CollapseIcon = new FontIcon();
             Content = Root;
@@ -54,7 +56,6 @@ public sealed partial class ContainerWindow : Window
         if (DiagnosticProbe.Variant("no-bindings")) { TitleText.ClearValue(TextBlock.TextProperty); StatusText.ClearValue(TextBlock.TextProperty); ItemsView.ClearValue(ItemsControl.ItemsSourceProperty); }
         if (DiagnosticProbe.IsRequested && Environment.GetEnvironmentVariable("NEXSPACE_DATA_DIR") is { } diagnosticDirectory && DiagnosticProbe.IsIsolated(diagnosticDirectory) && Environment.GetEnvironmentVariable("NEXSPACE_PROBE_DISABLE_DROP") == "1") ItemsView.AllowDrop = false;
         Root.DataContext = ViewModel;
-        if (!DiagnosticProbe.Variant("no-theme")) NexThemeManager.Register(this, Root);
         if (DiagnosticProbe.Variant("no-content")) Content = new Grid();
         if (DiagnosticProbe.Variant("no-list")) ContentArea.Children.Remove(ItemsView);
         if (DiagnosticProbe.Variant("no-tooltips"))
@@ -70,9 +71,9 @@ public sealed partial class ContainerWindow : Window
         }
         Title = _container.Name;
 
-        // Native caption customization reproducibly accumulates GDI objects on the tested SDK.
-        // Keep OS-owned move/resize/close chrome; legacy path is isolated diagnosis only.
-        if (DiagnosticProbe.Variant("legacy-titlebar") && !DiagnosticProbe.Variant("no-titlebar"))
+        // The legacy caption path is restricted to the original isolated diagnostic.
+        _legacyTitleBar = DiagnosticProbe.Variant("legacy-titlebar") && !DiagnosticProbe.Variant("no-titlebar");
+        if (_legacyTitleBar)
         {
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(DragRegion);
@@ -86,7 +87,11 @@ public sealed partial class ContainerWindow : Window
         {
             Root.RowDefinitions[0].Height = new GridLength(0);
             DragRegion.Visibility = Visibility.Collapsed;
+            if (!DiagnosticProbe.Variant("no-titlebar") && !DiagnosticProbe.Variant("system-chrome"))
+                _chrome = new FloatingChrome(this, Header, ResizeGrip, () => !_container.IsPositionLocked,
+                    new global::Windows.Graphics.SizeInt32(ContainerGeometry.MinimumWidth, ContainerGeometry.MinimumExpandedHeight));
         }
+        if (!DiagnosticProbe.Variant("no-theme")) NexThemeManager.Register(this, Root);
         var displays = new WindowsDisplayService().GetDisplays();
         var display = displays.FirstOrDefault(candidate => candidate.Key == _container.Placement.MonitorKey) ?? displays.FirstOrDefault(candidate => candidate.IsPrimary) ?? displays.FirstOrDefault();
         if (display is not null)
@@ -108,6 +113,7 @@ public sealed partial class ContainerWindow : Window
     private void WindowClosed(object sender, WindowEventArgs args)
     {
         _closed = true; _placementSaveTimer?.Dispose();
+        _chrome?.Dispose();
         AppWindow.Closing -= WindowClosing; AppWindow.Changed -= WindowChanged;
         ContainerChanged = null; ItemsView.ItemsSource = null; SystemBackdrop = null; Content = null;
         if (!DiagnosticProbe.Variant("legacy-closed-cleanup"))
@@ -133,7 +139,7 @@ public sealed partial class ContainerWindow : Window
         if (DiagnosticProbe.Variant("detach-on-close")) { DetachXamlHandlers(); Root.DataContext = null; Root.Children.Clear(); }
         _closed = true;
         _placementSaveTimer?.Stop();
-        if (DiagnosticProbe.Variant("legacy-titlebar") && !DiagnosticProbe.Variant("no-titlebar-reset")) SetTitleBar(null);
+        if (_legacyTitleBar && !DiagnosticProbe.Variant("no-titlebar-reset")) SetTitleBar(null);
         ItemsView.AllowDrop = false;
         ItemsView.ItemsSource = null;
         SystemBackdrop = null;
@@ -161,10 +167,16 @@ public sealed partial class ContainerWindow : Window
         var result = _service.SavePlacement(_containerId, placement, recoverPosition: true);
         if (!result.Succeeded) { ShowStatus(result.Message, result.Code); return; }
         AppWindow.MoveAndResize(new global::Windows.Graphics.RectInt32(placement.X, placement.Y,
-            Math.Max(ContainerGeometry.MinimumWidth, placement.Width), ContainerGeometry.VisibleHeight(_container.IsCollapsed, placement.Height)));
+            Math.Max(ContainerGeometry.MinimumWidth, placement.Width), VisibleHeight(placement.Height)));
         RefreshItems();
         Activate();
     }
+
+    private int CollapsedHeight => _chrome is null ? 114 : ContainerGeometry.CollapsedHeight;
+    internal bool UsesFloatingChrome => _chrome is not null;
+
+    private int VisibleHeight(int expandedHeight) => _container.IsCollapsed
+        ? CollapsedHeight : ContainerGeometry.VisibleHeight(false, expandedHeight);
 
     private void RefreshItems()
     {
@@ -172,9 +184,12 @@ public sealed partial class ContainerWindow : Window
         _container = ViewModel.Snapshot;
         Title = _container.Name;
         CollapseIcon.Glyph = _container.IsCollapsed ? "\uE70D" : "\uE70E";
+        ContainerIcon.Glyph = GroupGlyph(_container.Name);
         Root.RowDefinitions[2].Height = _container.IsCollapsed ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         ContentArea.Visibility = _container.IsCollapsed ? Visibility.Collapsed : Visibility.Visible;
         StatusText.Visibility = _container.IsCollapsed ? Visibility.Collapsed : Visibility.Visible;
+        ResizeGrip.Visibility = _chrome is null ? Visibility.Collapsed : StatusText.Visibility;
+        Root.RowSpacing = _container.IsCollapsed ? 0 : 8;   // collapsed card is exactly header-high
         EmptyState.Visibility = _container.IsCollapsed || _container.Items.Count != 0 ? Visibility.Collapsed : Visibility.Visible;
         _refreshing = true;
         try
@@ -182,9 +197,9 @@ public sealed partial class ContainerWindow : Window
             if (!DiagnosticProbe.Variant("no-minimum") && AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
             {
                 presenter.PreferredMinimumWidth = ContainerGeometry.MinimumWidth;
-                presenter.PreferredMinimumHeight = _container.IsCollapsed ? ContainerGeometry.CollapsedHeight : ContainerGeometry.MinimumExpandedHeight;
+                presenter.PreferredMinimumHeight = _container.IsCollapsed ? CollapsedHeight : ContainerGeometry.MinimumExpandedHeight;
             }
-            var height = ContainerGeometry.VisibleHeight(_container.IsCollapsed, _container.Placement.Height);
+            var height = VisibleHeight(_container.Placement.Height);
             if (AppWindow.Size.Height != height || AppWindow.Size.Width < ContainerGeometry.MinimumWidth)
                 AppWindow.Resize(new global::Windows.Graphics.SizeInt32(Math.Max(ContainerGeometry.MinimumWidth, AppWindow.Size.Width), height));
             ItemsView.ItemsPanel = (ItemsPanelTemplate)Microsoft.UI.Xaml.Application.Current.Resources[
@@ -194,6 +209,18 @@ public sealed partial class ContainerWindow : Window
         }
         finally { _refreshing = false; }
         ContainerChanged?.Invoke();
+    }
+
+    // Presentation-only identity glyph until containers persist their own (Concept C groups).
+    private static string GroupGlyph(string name)
+    {
+        var n = name.ToLowerInvariant();
+        if (n.Contains("juego") || n.Contains("game")) return "";
+        if (n.Contains("aplic") || n.Contains("app") || n.Contains("program")) return "";
+        if (n.Contains("web") || n.Contains("internet") || n.Contains("naveg")) return "";
+        if (n.Contains("foto") || n.Contains("imagen")) return "";
+        if (n.Contains("músic") || n.Contains("music")) return "";
+        return "";
     }
 
     private void Collapse_Click(object sender, RoutedEventArgs e) => ApplyPresentation(collapsed: !_container.IsCollapsed);
@@ -342,6 +369,13 @@ public sealed partial class ContainerWindow : Window
     private void Options_Click(object sender, RoutedEventArgs e)
     {
         var menu = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.BottomEdgeAlignedRight };
+        // View + accent live here now so the header stays discreet (Concept C: minimal chrome).
+        menu.Items.Add(Menu(_container.ViewMode == ContainerViewMode.Grid ? "Ver como lista" : "Ver como cuadrícula", () => ApplyPresentation(viewMode: _container.ViewMode == ContainerViewMode.Grid ? ContainerViewMode.List : ContainerViewMode.Grid)));
+        var color = new MenuFlyoutSubItem { Text = "Color del contenedor" };
+        foreach (var accent in new[] { ("Azul", "blue-hour"), ("Verde agua", "sea-glass"), ("Cobre", "copper") })
+            color.Items.Add(Menu(accent.Item1, () => ApplyPresentation(accentKey: accent.Item2)));
+        menu.Items.Add(color);
+        menu.Items.Add(new MenuFlyoutSeparator());
         menu.Items.Add(Menu(_container.IsCollapsed ? "Expandir" : "Contraer", () => ApplyPresentation(collapsed: !_container.IsCollapsed)));
         menu.Items.Add(Menu(_container.IsPositionLocked ? "Desbloquear posición" : "Bloquear posición", () =>
         {
@@ -353,6 +387,8 @@ public sealed partial class ContainerWindow : Window
             _lockedPosition = AppWindow.Position;
             RefreshItems();
         }));
+        menu.Items.Add(new MenuFlyoutSeparator());
+        menu.Items.Add(Menu("Cerrar contenedor", Close));
         menu.ShowAt((FrameworkElement)sender);
     }
 

@@ -8,32 +8,50 @@ using NexSpace.Infrastructure;
 namespace NexSpace.UI.Visuals;
 
 /// <summary>One owned controller per window; system policy/configuration is maintained by WinUI.</summary>
-internal sealed class NexGlassBackdrop(Grid surface) : SystemBackdrop
+internal sealed class NexGlassBackdrop(Grid surface, SystemBackdropTheme theme) : SystemBackdrop
 {
     private DesktopAcrylicController? _controller;
+    private readonly SystemBackdropConfiguration _configuration = new()
+    {
+        IsInputActive = true,
+        Theme = theme
+    };
+
+    public void Update(SystemBackdropTheme resolvedTheme)
+    {
+        _configuration.Theme = resolvedTheme;
+        if (_controller is not { } controller) return;
+        var solid = SolidSurface.Color;
+        controller.TintColor = solid;
+        controller.FallbackColor = solid;
+        // Keep the wallpaper visible at the low end of the existing density control.
+        controller.TintOpacity = (float)(0.30 + (NexThemeManager.Current.Opacity - 0.65) / 0.35 * 0.50);
+    }
+
+    private SolidColorBrush SolidSurface =>
+        (SolidColorBrush)(surface.Resources.TryGetValue("NexSolidSurfaceBrush", out var local)
+            ? local : Microsoft.UI.Xaml.Application.Current.Resources["NexSolidSurfaceBrush"]);
     protected override void OnTargetConnected(ICompositionSupportsSystemBackdrop connectedTarget, XamlRoot xamlRoot)
     {
         base.OnTargetConnected(connectedTarget, xamlRoot);
         try
         {
             var resources = Microsoft.UI.Xaml.Application.Current.Resources;
-            var solid = ((SolidColorBrush)(surface.Resources.TryGetValue("NexSolidSurfaceBrush", out var local) ? local : resources["NexSolidSurfaceBrush"])).Color;
             _controller = new DesktopAcrylicController
             {
                 Kind = DesktopAcrylicKind.Thin,
-                TintColor = solid,
-                TintOpacity = (float)NexThemeManager.Current.Opacity,
-                LuminosityOpacity = (float)(double)resources["NexGlassLuminosityOpacity"],
-                FallbackColor = solid
+                LuminosityOpacity = (float)(double)resources["NexGlassLuminosityOpacity"]
             };
-            _controller.SetSystemBackdropConfiguration(GetDefaultSystemBackdropConfiguration(connectedTarget, xamlRoot));
+            Update(_configuration.Theme);
+            // FLOATING surfaces retain the material when another window takes focus.
+            _controller.SetSystemBackdropConfiguration(_configuration);
             _controller.AddSystemBackdropTarget(connectedTarget);
         }
         catch (Exception ex)
         {
             _controller?.Dispose();
             _controller = null;
-            surface.Background = (Brush)Microsoft.UI.Xaml.Application.Current.Resources["NexSolidSurfaceBrush"];
+            surface.Background = SolidSurface;
             new JsonEventLog().Write("nexglass-connection-fallback", "Solid surface applied", ex.GetType().Name);
         }
     }
