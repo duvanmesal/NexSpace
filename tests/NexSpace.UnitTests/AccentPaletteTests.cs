@@ -57,6 +57,42 @@ public sealed class AccentPaletteTests
         Assert.NotEqual(blue, orange);
     }
 
+
+    [Theory]
+    [InlineData("#7FB2EA")] // Dark, Minimal and default Windows fallback
+    [InlineData("#92CDBB")]
+    [InlineData("#DEA78E")]
+    [InlineData("#2A6BB0")] // Light and light Windows fallback
+    [InlineData("#1E7A63")]
+    [InlineData("#9A4A28")]
+    [InlineData("#FFFF64")] // Contrast
+    public void Primary_button_ink_clears_aa_in_each_interactive_state(string accent)
+    {
+        var (foreground, pointerOver, pressed) = AccentPalette.DeriveButtonColors(accent);
+        var (fr, fg, fb) = FromHex(foreground);
+        var previous = 4.5;
+        foreach (var fill in new[] { accent, pointerOver, pressed })
+        {
+            var (r, g, b) = FromHex(fill);
+            var ratio = AccentPalette.ContrastRatio(fr, fg, fb, r, g, b);
+            Assert.True(ratio >= previous, $"{foreground} on {fill} only reached {ratio:0.00}:1");
+            previous = ratio;
+        }
+
+        Assert.NotEqual(accent, pointerOver);
+        Assert.NotEqual(pointerOver, pressed);
+    }
+
+    [Theory]
+    [InlineData((byte)255, (byte)0, (byte)0)]
+    [InlineData((byte)0, (byte)0, (byte)255)]
+    [InlineData((byte)0, (byte)255, (byte)0)]
+    [InlineData((byte)161, (byte)161, (byte)161)]
+    public void Primary_button_ink_adapts_to_automatic_palettes(byte r, byte g, byte b)
+    {
+        Primary_button_ink_clears_aa_in_each_interactive_state(AccentPalette.DeriveAccentHex(r, g, b, true));
+        Primary_button_ink_clears_aa_in_each_interactive_state(AccentPalette.DeriveAccentHex(r, g, b, false));
+    }
     private static (byte R, byte G, byte B) FromHex(string hex) =>
         (Convert.ToByte(hex.Substring(1, 2), 16), Convert.ToByte(hex.Substring(3, 2), 16), Convert.ToByte(hex.Substring(5, 2), 16));
 }

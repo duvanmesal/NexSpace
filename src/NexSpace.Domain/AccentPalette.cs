@@ -41,6 +41,26 @@ public static class AccentPalette
         return forLightSurface ? FallbackOnLight : FallbackOnDark;
     }
 
+    /// <summary>Uses one ink color across the interactive fills of a primary button.</summary>
+    public static (string Foreground, string PointerOver, string Pressed) DeriveButtonColors(string accent)
+    {
+        var r = HexByte(accent, 0);
+        var g = HexByte(accent, 1);
+        var b = HexByte(accent, 2);
+        var useDarkInk = ContrastRatio(r, g, b, 0, 0, 0) >= ContrastRatio(r, g, b, 255, 255, 255);
+        var foreground = useDarkInk ? "#000000" : "#FFFFFF";
+        var target = useDarkInk ? 255 : 0;
+
+        // Move the fill away from its ink, so hover and press can only improve text contrast.
+        string Blend(double amount)
+        {
+            byte Mix(byte channel) => (byte)Math.Round(channel + (target - channel) * amount);
+            return ToHex(Mix(r), Mix(g), Mix(b));
+        }
+
+        return (foreground, Blend(0.10), Blend(0.20));
+    }
+
     private static double ClampedStartLightness(bool forLightSurface)
     {
         // Start the search from a sensible midpoint rather than the raw input lightness, so a

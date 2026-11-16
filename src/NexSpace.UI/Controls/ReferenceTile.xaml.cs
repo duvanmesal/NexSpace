@@ -37,8 +37,9 @@ public sealed partial class ReferenceTile : UserControl
         LayoutRoot.ColumnDefinitions[1].Width = grid ? new GridLength(0) : new GridLength(1, GridUnitType.Star);
         Grid.SetRow(Labels, grid ? 1 : 0); Grid.SetColumn(Labels, grid ? 0 : 1);
         NameLabel.TextAlignment = grid ? TextAlignment.Center : TextAlignment.Left;
-        IconHost.Width = IconHost.Height = grid ? 40 : 28;
-        ErrorLabel.Visibility = item.Status.Exists ? Visibility.Collapsed : Visibility.Visible;
+        IconHost.Width = IconHost.Height = grid ? 36 : 28;
+        WarningBadge.Visibility = grid && !item.Status.Exists ? Visibility.Visible : Visibility.Collapsed;
+        ErrorLabel.Visibility = !grid && !item.Status.Exists ? Visibility.Visible : Visibility.Collapsed;
         FallbackIcon.Glyph = item.Reference.Kind switch { ContainerItemKind.Folder => "\uE8B7", ContainerItemKind.Application => "\uE71D", ContainerItemKind.Shortcut => "\uE8A7", ContainerItemKind.SystemResource => SystemGlyph(item.Reference.Target), _ => "\uE8A5" };
         FallbackIcon.Visibility = Visibility.Visible;
         _lifetime = new CancellationTokenSource();

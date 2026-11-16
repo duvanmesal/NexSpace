@@ -128,9 +128,10 @@ internal static class NexThemeManager
             Set(root, "NexWarningBrush", light ? "#8A4B00" : "#F1C58D");
             Set(root, "NexSeaBrush", accent); Set(root, "NexBlueBrush", contrast ? "#FFFF64" : light ? "#2A6BB0" : "#7FB2EA"); Set(root, "NexCopperBrush", contrast ? "#FFFF64" : light ? "#9A4A28" : "#DEA78E");
             Set(root, "NexSeaGlassBrush", contrast ? "#FFFF64" : light ? "#1E7A63" : "#92CDBB");
-            // Text/icon color that sits ON the accent fill. The accent flips dark-on-light vs
-            // light-on-dark per theme, so the on-accent color flips opposite.
-            Set(root, "NexOnAccentBrush", light ? "#F3F5F8" : "#12161B");
+            var button = AccentPalette.DeriveButtonColors(accent);
+            Set(root, "NexOnAccentBrush", button.Foreground);
+            Set(root, "NexAccentPointerOverBrush", button.PointerOver);
+            Set(root, "NexAccentPressedBrush", button.Pressed);
         }
         root.RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark;
         // Window roots stay square: DWM rounds the window itself (an inner radius showed black wedges).
@@ -172,6 +173,12 @@ internal static class NexThemeManager
         // Icon elements own their glyph font and semantic color — never override them with the
         // body font (that renders Segoe Fluent glyphs as missing-glyph boxes) or text color.
         if (parent is IconElement) return;
+        if (parent is Button button &&
+            ReferenceEquals(button.Style, Microsoft.UI.Xaml.Application.Current.Resources["NexAccentButtonStyle"]))
+        {
+            button.FontFamily = new FontFamily(Current.Font);
+            return;
+        }
         if (parent is TextBlock text) { text.FontFamily = new FontFamily(Current.Font); if (!highContrast) text.Foreground = foreground; }
         if (parent is Control control) { control.FontFamily = new FontFamily(Current.Font); if (!highContrast) control.Foreground = foreground; }
         if (parent is StackPanel stack && stack.Spacing > 0) stack.Spacing = Current.Spacing;

@@ -13,6 +13,8 @@
             <SolidColorBrush x:Key="NexBlueBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="NexCopperBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="NexOnAccentBrush" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="NexAccentPointerOverBrush" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="NexAccentPressedBrush" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="{ThemeResource SystemColorHighlightColor}" />
             <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="{ThemeResource SystemColorHighlightColor}" />
@@ -30,7 +32,9 @@
     <SolidColorBrush x:Key="NexSeaGlassBrush" Color="#92CDBB" />
     <SolidColorBrush x:Key="NexBlueBrush" Color="#7FB2EA" />
     <SolidColorBrush x:Key="NexCopperBrush" Color="#DEA78E" />
-    <SolidColorBrush x:Key="NexOnAccentBrush" Color="#12161B" />
+    <SolidColorBrush x:Key="NexOnAccentBrush" Color="#000000" />
+    <SolidColorBrush x:Key="NexAccentPointerOverBrush" Color="#8CB9EC" />
+    <SolidColorBrush x:Key="NexAccentPressedBrush" Color="#99C1EE" />
     <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#1AFFFFFF" />
     <SolidColorBrush x:Key="ListViewItemBackgroundSelected" Color="#337FB2EA" />
     <SolidColorBrush x:Key="ListViewItemBackgroundSelectedPointerOver" Color="#447FB2EA" />
@@ -73,7 +77,7 @@
         <Setter Property="CornerRadius" Value="{ThemeResource NexPanelCornerRadius}" />
         <Setter Property="Margin" Value="0,0,0,9" />
     </Style>
-    <ItemsPanelTemplate x:Key="NexGridItemsPanel"><ItemsWrapGrid Orientation="Horizontal" ItemWidth="108" ItemHeight="112" /></ItemsPanelTemplate>
+    <ItemsPanelTemplate x:Key="NexGridItemsPanel"><ItemsWrapGrid Orientation="Horizontal" ItemWidth="108" ItemHeight="96" /></ItemsPanelTemplate>
     <ItemsPanelTemplate x:Key="NexListItemsPanel"><ItemsStackPanel /></ItemsPanelTemplate>
     <DataTemplate x:Key="NexReferenceTemplate"><controls:ReferenceTile /></DataTemplate>
 
@@ -83,12 +87,49 @@
         <Setter Property="FontSize" Value="11.5" /><Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="CharacterSpacing" Value="90" /><Setter Property="Foreground" Value="{ThemeResource NexSecondaryTextBrush}" />
     </Style>
-    <!-- Prominent primary action (filled accent). On-accent foreground flips with theme. -->
     <Style x:Key="NexAccentButtonStyle" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
         <Setter Property="Background" Value="{ThemeResource NexSeaBrush}" />
         <Setter Property="Foreground" Value="{ThemeResource NexOnAccentBrush}" />
-        <Setter Property="BorderThickness" Value="0" /><Setter Property="CornerRadius" Value="8" />
-        <Setter Property="Padding" Value="15,8" /><Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Padding" Value="15,8" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="UseSystemFocusVisuals" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <ContentPresenter x:Name="Presenter" Content="{TemplateBinding Content}"
+                                      Background="{TemplateBinding Background}" Foreground="{TemplateBinding Foreground}"
+                                      CornerRadius="{TemplateBinding CornerRadius}" Padding="{TemplateBinding Padding}"
+                                      HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                      BorderBrush="Transparent" BorderThickness="1">
+                        <VisualStateManager.VisualStateGroups>
+                            <VisualStateGroup x:Name="CommonStates">
+                                <VisualState x:Name="Normal" />
+                                <VisualState x:Name="PointerOver">
+                                    <VisualState.Setters>
+                                        <Setter Target="Presenter.Background" Value="{ThemeResource NexAccentPointerOverBrush}" />
+                                        <Setter Target="Presenter.BorderBrush" Value="{ThemeResource NexOnAccentBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Pressed">
+                                    <VisualState.Setters>
+                                        <Setter Target="Presenter.Background" Value="{ThemeResource NexAccentPressedBrush}" />
+                                        <Setter Target="Presenter.BorderBrush" Value="{ThemeResource NexOnAccentBrush}" />
+                                        <Setter Target="Presenter.BorderThickness" Value="2" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                                <VisualState x:Name="Disabled">
+                                    <VisualState.Setters>
+                                        <Setter Target="Presenter.Background" Value="{ThemeResource NexElevatedBrush}" />
+                                        <Setter Target="Presenter.Foreground" Value="{ThemeResource NexSecondaryTextBrush}" />
+                                    </VisualState.Setters>
+                                </VisualState>
+                            </VisualStateGroup>
+                        </VisualStateManager.VisualStateGroups>
+                    </ContentPresenter>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
     <!-- Editorial "now" panel: elevated card with a copper identity edge. -->
     <Style x:Key="NexHeroPanelStyle" TargetType="Border">
