@@ -18,3 +18,9 @@ El diagnóstico, los límites de seguridad, la recuperación, `DeferredAction` y
 ## Aceptación
 
 La candidata se evalúa con la serie de regeneración de Fase 4.1 y una biblioteca de demostración independiente. El informe de pruebas distingue funcionamiento, consumo nativo y validación visual. La adopción del marco y la publicación de 1.0 siguen sujetas a la evidencia de estabilidad y revisión humana.
+
+## Ajuste de la candidata integrada
+
+El botón primario deriva la tinta de mayor contraste entre negro y blanco para su relleno efectivo. Los estados de puntero y pulsado alejan el relleno de esa tinta. La plantilla conserva esos pares al aplicar temas. La cuadrícula usa celdas de 108 × 96 unidades y dos líneas para el nombre. Se conserva el presentador de ADR-014 tras descartar la variante que ampliaba el filo claro a todo el contorno. La matriz registra la limitación visual y las mediciones.
+
+El material usa una SystemBackdropConfiguration propia con tema y estado de entrada explícitos. Se omite la notificación de cambio de configuración predeterminada de la clase base. Esta ruta produjo 0x80070057 al cambiar de perfil con Acrylic habilitado. La conexión y desconexión de destinos conservan su implementación. La regresión manual alterna el perfil claro con el perfil Automático en ambos sentidos.

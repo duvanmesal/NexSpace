@@ -59,3 +59,37 @@ Se conserva la composición de grupos flotantes, barra inferior centrada y popov
 ## Decisión
 
 La rama queda como candidata local para revisión. Antes de incorporar a `main`, validar el coste del marco con material Acrylic activo, contrastar los controles en alto contraste real y acordar la mitigación o el criterio de aceptación del crecimiento residual de Composition y Event. Mantener DESKTOP deshabilitado y 1.0 bloqueado. Se conservan los dos worktrees de origen. No se publica el binario ni se suben commits.
+
+## Consolidación de la candidata 51366f1
+
+| Validación | Resultado | Evidencia |
+| --- | --- | --- |
+| Cuadrícula | PASS | A 406 × 303 px se leen seis referencias en dos filas. A 307 px de ancho pasan a dos columnas con desplazamiento. El nombre largo admite dos líneas. |
+| Botón primario | PASS en los cinco temas de la aplicación | En el azul automático de reserva el texto pasa de 2,01 a 9,46:1. Con puntero y pulsado, los pares semánticos dan 10,35 y 11,22:1. Sobre azul claro de tema Light, texto blanco con 5,49, 6,46 y 7,54:1. Se inspeccionaron cinco estados normales, foco en Automático y puntero en Light. El estado pulsado se validó matemáticamente. |
+| Filo al recibir foco | FAIL visual | El experimento sin redimensionamiento del presentador extendió el borde claro al contorno. Se descartó. Se conserva el marco integrado y sigue visible la banda superior activa. |
+| Regresión | PASS en la demostración aislada | Creación, apertura explícita de un TXT en Bloc de notas con hash conservado, contracción, expansión, movimiento y tamaño con el menú del sistema, cambio de perfiles, recuperación global, cierre y reapertura con cuatro contenedores. SQLite integrity_check devolvió ok. |
+| Arrastre del encabezado y tirador | NOT_TESTED en hardware | El gesto simulado no produjo un cambio medible. El menú del sistema sí cambió la geometría persistida. |
+| Debug y Release x64 | PASS | Restore y compilación completados. En cada configuración pasaron 92 pruebas unitarias y 35 de integración. |
+
+La evidencia privada se encuentra en `artifacts/concept-c-phase41/consolidation/`. Las parejas de capturas `before-archivos-focused` y `after-archivos-focused`, y `before-primary-auto` y `after-primary-auto`, permiten comparar el mismo escenario. El perfil de demostración reabierto contiene 44 referencias, incluidas 30 de prueba en Validación local.
+
+### Recursos de la consolidación con efectos desactivados
+
+| Escenario | GDI | USER | Handles | Privada MiB | Composition | Event | Timer | WaitCompletionPacket |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 100 cambios de perfil | 95→85 | 90→78 | 2092→2532 | 97,8→125,9 | 17→216 | 1365→1597 | 4→5 | 60→60 |
+| 300 ciclos de contenedor | 51→41 | 69→37 | 2033→2619 | 97,1→128,7 | 9→308 | 1362→1661 | 4→4 | 58→60 |
+
+En 300 ciclos, el incremento de handles fue +609 en Fase 4.1, +628 en la integración inicial y +586 en esta candidata. Composition creció +299 en las tres series. Event creció +318, +322 y +299 respectivamente. En 100 cambios de perfil los handles crecieron +421, +432 y +440. Ambas series finales terminaron con código 0. Sigue pendiente una decisión de aceptación del crecimiento residual.
+
+### Acrylic activo en Windows 11
+
+La preferencia original era 0. Con transparencia activada desde Configuración, el proceso detectó el cambio y registró Thin Acrylic con efectos avanzados disponibles. Se inspeccionaron Archivos enfocado y sin foco, la barra y el popover abierto. El popover conserva una tarjeta oscura. En la candidata previa, cambiar desde Concepto C a Lectura terminó el proceso en Microsoft.UI.Xaml.dll. El registro de la aplicación conserva 0x80070057 en OnDefaultSystemBackdropConfigurationChanged. La prueba de 100 cambios sintéticos había terminado con éxito en ese mismo binario.
+
+En 30150f1 el controlador usa exclusivamente la configuración de NexSpace. Se comprobó la secuencia Lectura → Concepto C → Lectura → Concepto C en el mismo proceso. Se capturaron el tema claro y el retorno a Automático. El contraste puntual de píxeles del encabezado de ambas capturas fue 12,34:1 y 5,72:1 respectivamente, usando la fila 44, tinta extrema en X=48–89 y fondo en X=160. Son muestras de JPEG del resultado compuesto. El contraste en otras zonas y con otros fondos depende de su composición. Queda pendiente una comparación del mismo contenedor sobre dos fondos certificados en idéntica posición.
+
+Debug y Release x64 de la corrección compilaron con cero errores y advertencias. En cada configuración pasaron 92 pruebas unitarias y 35 de integración. Evidencia de la transición original en `profile-switch-51366f1.jsonl`, pruebas en `tests/acrylic-*` y capturas en `captures/fixed-*`.
+
+Con 100 cambios de perfil, Acrylic antes de la corrección registró +683 handles, +405 Composition y +237 Event. La repetición con la corrección alcanzó 2041→2708 handles (+667), 17→422 Composition (+405), 1333→1573 Event (+240), GDI 97→97, USER 45→63 y privada 101,7→125,3 MiB. Timer quedó en 4 y WaitCompletionPacket en 60. El proceso de prueba terminó normalmente tras 30 s de reposo. En la serie con efectos desactivados Composition creció +199. El cierre al alternar perfiles quedó corregido en la reproducción manual, pero persiste un coste de recursos superior con el material activo. Recomendación de aceptación limitada a revisión local.
+
+Se restauró «Efectos de transparencia» a Desactivado y se verificó EnableTransparency=0. La candidata corregida quedó abierta sobre la biblioteca aislada.
