@@ -1,0 +1,16 @@
+[package]
+name = "nexspace-tauri-lab"
+version = "0.1.0"
+edition = "2021"
+[build-dependencies]
+tauri-build = "2"
+[dependencies]
+tauri = "2"
+serde = { version = "1", features = ["derive"] }
+open = "5"
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+[profile.release]
+opt-level = 1
+debug = false

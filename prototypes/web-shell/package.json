@@ -1,0 +1,22 @@
+{
+  "name": "nexspace-shell-lab",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build"
+  },
+  "dependencies": {
+    "react": "^19",
+    "react-dom": "^19",
+    "@tauri-apps/api": "^2",
+    "lucide-react": "^0.468.0"
+  },
+  "devDependencies": {
+    "vite": "^7",
+    "typescript": "^5.9",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "tailwindcss": "^4",
+    "@tailwindcss/vite": "^4"
+  }
+}

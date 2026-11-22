@@ -1,0 +1,254 @@
+@import "tailwindcss";
+:root {
+  font-family: "Segoe UI Variable Text", "Segoe UI", sans-serif;
+  color-scheme: dark;
+  --ink: #f7f9fc;
+  --edge: #8895a178;
+  --rule: #a4b7c524;
+  --wash: rgba(22, 26, 31, 0.8);
+  --shine: rgba(93, 108, 124, 0.24);
+  --hover: #93a8bb24;
+  --accent: #9ccfff;
+  color: var(--ink);
+  font-size: 14px;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ink: #152331;
+  --edge: #465b7170;
+  --wash: rgba(242, 245, 248, 0.93);
+  --shine: #ffffff80;
+  --hover: #304a6220;
+  --rule: #253a4d22;
+  --accent: #225f9e;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: transparent;
+}
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+.glass {
+  position: relative;
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  overflow: hidden;
+  background:
+    linear-gradient(154deg, var(--shine), transparent 55%), var(--wash);
+  box-shadow: inset 0 1px 0 #ffffff14;
+  color: var(--ink);
+  height: 100%;
+}
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 51px;
+  padding: 0 15px 0 21px;
+  border-bottom: 1px solid var(--rule);
+  user-select: none;
+}
+header h1 {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 540;
+}
+header > svg,
+header > .art {
+  width: 21px;
+  height: 21px;
+}
+button {
+  border: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+  transition: background 0.12s;
+}
+button:hover,
+button.selected {
+  background: var(--hover);
+}
+button:active {
+  background: #8196aa40;
+}
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -3px;
+}
+header button,
+.dock button {
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 30px;
+}
+header button svg {
+  width: 17px;
+}
+header button[aria-label="Opciones"] {
+  opacity: 0;
+}
+header:hover button,
+header:focus-within button {
+  opacity: 1;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 10px 12px;
+  max-height: calc(100% - 51px);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.tiles button {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  min-height: 88px;
+  border-radius: 8px;
+}
+.art {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
+}
+.tiles span {
+  font-size: 13px;
+  text-align: center;
+}
+.collapsed header {
+  border: 0;
+}
+.turned {
+  transform: rotate(-90deg);
+}
+.grip {
+  position: absolute;
+  bottom: 1px;
+  right: 2px;
+  opacity: 0.45;
+  cursor: nwse-resize;
+}
+.dock {
+  gap: 12px;
+  padding: 8px 16px;
+  border-radius: 19px;
+}
+.dock button {
+  width: 54px;
+  height: 52px;
+  position: relative;
+}
+.dock svg,
+.dock img {
+  width: 28px;
+  height: 28px;
+}
+.home-mark {
+  color: #6ac3fa;
+}
+.panel .rows {
+  max-height: calc(100% - 51px);
+  overflow: auto;
+}
+@media (max-width: 300px) {
+  .tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.dock i {
+  height: 30px;
+  width: 1px;
+  background: var(--rule);
+  margin: 0 6px;
+}
+.selected:after {
+  content: "";
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  position: absolute;
+  bottom: 2px;
+}
+.popup {
+  margin-bottom: 10px;
+  height: calc(100% - 10px);
+  overflow: visible;
+}
+.popup:after {
+  content: "";
+  position: absolute;
+  bottom: -7px;
+  left: calc(var(--tail, 50%) - 7px);
+  width: 13px;
+  height: 13px;
+  background: var(--wash);
+  border-right: 1px solid var(--edge);
+  border-bottom: 1px solid var(--edge);
+  transform: rotate(45deg);
+}
+.popup header {
+  height: 43px;
+  padding-left: 15px;
+}
+.popup h1 {
+  font-size: 14px;
+}
+.rows {
+  padding: 5px 8px;
+}
+.rows button {
+  width: 100%;
+  height: 33px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 8px;
+  border-radius: 5px;
+  font-size: 13px;
+}
+.rows img {
+  width: 23px;
+  height: 23px;
+}
+aside,
+output {
+  position: absolute;
+  z-index: 2;
+  right: 10px;
+  top: 40px;
+  padding: 8px;
+  border-radius: 7px;
+  background: Canvas;
+  color: CanvasText;
+  border: 1px solid var(--edge);
+}
+@media (prefers-reduced-motion: reduce) {
+  button {
+    transition: none;
+  }
+}
+@media (forced-colors: active) {
+  .glass,
+  header {
+    border-color: CanvasText;
+  }
+  .selected:after {
+    background: Highlight;
+  }
+}

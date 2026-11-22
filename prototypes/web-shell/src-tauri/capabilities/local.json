@@ -1,0 +1,12 @@
+{
+  "identifier": "local-shell",
+  "description": "Local prototype views only",
+  "windows": [
+    "files",
+    "games",
+    "apps",
+    "dock",
+    "popup"
+  ],
+  "permissions": []
+}
