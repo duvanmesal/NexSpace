@@ -7,7 +7,7 @@ using NexSpace.Infrastructure;
 
 namespace NexSpace.UI.Visuals;
 
-/// <summary>One owned controller per window; system policy/configuration is maintained by WinUI.</summary>
+/// <summary>Owns the window controller and its explicit backdrop configuration.</summary>
 internal sealed class NexGlassBackdrop(Grid surface, SystemBackdropTheme theme) : SystemBackdrop
 {
     private DesktopAcrylicController? _controller;
@@ -54,6 +54,13 @@ internal sealed class NexGlassBackdrop(Grid surface, SystemBackdropTheme theme) 
             surface.Background = SolidSurface;
             new JsonEventLog().Write("nexglass-connection-fallback", "Solid surface applied", ex.GetType().Name);
         }
+    }
+
+    protected override void OnDefaultSystemBackdropConfigurationChanged(
+        ICompositionSupportsSystemBackdrop target, XamlRoot xamlRoot)
+    {
+        // This controller uses our own configuration, updated by NexThemeManager.
+        // A queued default-configuration notification can outlive its XAML root on profile switch.
     }
 
     protected override void OnTargetDisconnected(ICompositionSupportsSystemBackdrop disconnectedTarget)
