@@ -30,7 +30,17 @@ git ls-remote --heads origin
 
 Para revisar una rama ocupada en otro worktree, comprueba primero el estado y los archivos locales sin seguimiento. Con el trabajo guardado, usa `git switch --detach codex/web-shell-lab` para ejecutar el laboratorio desde esta carpeta. Para editar, crea una rama de trabajo con `git switch -c work/mi-cambio codex/web-shell-lab`. Si Git informa una colisión, preserva los archivos locales antes de continuar. `git switch -` vuelve a la revisión anterior.
 
-En la rama del laboratorio, con Node, Rust y el SDK .NET disponibles, ejecuta:
+En esta instalación, el SDK .NET y la cadena Rust GNU se pueden reutilizar desde la raíz habitual. Estas variables duran una sesión de PowerShell.
+
+```powershell
+$env:DOTNET_ROOT = Join-Path $env:LOCALAPPDATA 'dotnet-sdk'
+$labTools = (Resolve-Path '../NEXSPACE-web-lab/artifacts/web-lab').Path
+$env:CARGO_HOME = Join-Path $labTools 'cargo'
+$env:RUSTUP_HOME = Join-Path $labTools 'rustup'
+$env:Path = "$env:DOTNET_ROOT;$env:CARGO_HOME/bin;$labTools/mingw64/bin;$env:Path"
+```
+
+Desde `codex/web-shell-lab` o una revisión derivada de esa rama, compila y ejecuta el laboratorio A/B:
 
 ```powershell
 ./prototypes/web-shell/Build.ps1
@@ -39,7 +49,7 @@ En la rama del laboratorio, con Node, Rust y el SDK .NET disponibles, ejecuta:
 & ./artifacts/web-lab/B/nexspace-tauri-lab.exe
 ```
 
-La rama del piloto contiene sus instrucciones en `prototypes/web-shell/PILOTO.md`. Mantén los ejecutables, bibliotecas de prueba, capturas y mediciones privadas en `artifacts/`. El lanzamiento WinUI unpackaged y las pruebas se describen más abajo.
+Desde `experiment/tauri-nexcore`, usa `./prototypes/web-shell/Build-Pilot.ps1` y ejecuta `./artifacts/tauri-nexcore/B/nexspace-tauri-lab.exe`. Para partir de una biblioteca de demostración existente, usa el parámetro `-DemoDatabase`. La rama del piloto contiene los contratos, las pruebas y la preparación reproducible en `prototypes/web-shell/PILOTO.md`. Las salidas de A/B y las del piloto ocupan carpetas distintas. Mantén los ejecutables, bibliotecas de prueba, capturas y mediciones privadas en `artifacts/`. El lanzamiento WinUI unpackaged y las pruebas se describen más abajo.
 
 ## Principios del producto
 
@@ -89,10 +99,10 @@ La razón de selección y las limitaciones del entorno constan en `docs/decision
 ## Compilar y ejecutar pruebas
 
 ```powershell
-& "$env:USERPROFILE\.dotnet\dotnet.exe" restore NexSpace.sln -p:Platform=x64
-& "$env:USERPROFILE\.dotnet\dotnet.exe" build NexSpace.sln --configuration Debug --no-restore -p:Platform=x64
-& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\NexSpace.UnitTests\NexSpace.UnitTests.csproj --configuration Debug
-& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests\NexSpace.IntegrationTests\NexSpace.IntegrationTests.csproj --configuration Debug
+dotnet restore NexSpace.sln -p:Platform=x64
+dotnet build NexSpace.sln --configuration Debug --no-restore -p:Platform=x64
+dotnet test tests\NexSpace.UnitTests\NexSpace.UnitTests.csproj --configuration Debug
+dotnet test tests\NexSpace.IntegrationTests\NexSpace.IntegrationTests.csproj --configuration Debug
 ```
 
 La solución mapea librerías/pruebas a AnyCPU y UI a x64. También se pueden compilar/ejecutar pruebas explícitamente con `-p:Platform=x64`; no mezclar ese override con `--no-build` sobre ensamblados construidos solo por la solución en otra carpeta. Una compilación exitosa no valida comportamiento visual ni integración de escritorio. Resultados actuales y comandos en [PHASE3_VALIDATION](docs/testing/PHASE3_VALIDATION.md).
@@ -100,13 +110,13 @@ La solución mapea librerías/pruebas a AnyCPU y UI a x64. También se pueden co
 Para abrir el paquete de desarrollo (requiere Developer Mode):
 
 ```powershell
-& "$env:USERPROFILE\.dotnet\dotnet.exe" run --project src/NexSpace.UI/NexSpace.UI.csproj --configuration Debug -p:Platform=x64
+dotnet run --project src/NexSpace.UI/NexSpace.UI.csproj --configuration Debug -p:Platform=x64
 ```
 
 Alternativa sin Developer Mode: compila como unpackaged y ejecuta el EXE. No registra un paquete ni modifica Windows:
 
 ```powershell
-& "$env:USERPROFILE\.dotnet\dotnet.exe" build src\NexSpace.UI\NexSpace.UI.csproj --configuration Debug -p:Platform=x64 -p:WindowsPackageType=None -p:EnableMsixTooling=false
+dotnet build src\NexSpace.UI\NexSpace.UI.csproj --configuration Debug -p:Platform=x64 -p:WindowsPackageType=None -p:EnableMsixTooling=false
 & ".\src\NexSpace.UI\bin\x64\Debug\net10.0-windows10.0.26100.0\win-x64\NexSpace.UI.exe"
 ```
 
@@ -131,3 +141,7 @@ Antes de publicar, revisar `git status`, `git diff --cached` y la lista de archi
 Fases 2 y 3 aceptadas condicionalmente y publicadas. Fase 4 autorizada para estabilización y preparación de distribución. La publicación de ramas de investigación requiere revisar su historial y verificar el SHA remoto. No es una declaración de disponibilidad de NexSpace 1.0. Inicio con Windows desactivado por defecto; no activado en pruebas. Estado y pendientes en [roadmap](docs/ROADMAP.md).
 
 Preparación de la candidata: [instalación y distribución](docs/phase-4/DISTRIBUCION.md), [uso y recuperación](docs/phase-4/USO_Y_RECUPERACION.md), [diagnóstico y aceptación](docs/testing/PHASE4_VALIDATION.md).
+
+## Conservación de worktrees
+
+La carpeta principal conserva la configuración local de agentes. La de diseño contiene una instalación local de skills. La de integración incluye bases de demostración, capturas y mediciones excluidas. La del laboratorio contiene la cadena Rust, ejecutables y evidencia histórica. Antes de retirar cualquiera, comprobar su rama con `git branch -vv`, revisar `git status --short --ignored`, respaldar los artefactos privados que deban conservarse y verificar las herramientas de compilación desde la raíz. La retirada requiere autorización explícita por carpeta.
