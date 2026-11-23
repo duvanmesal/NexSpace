@@ -7,7 +7,7 @@ export type Action =
   | { kind: "collapse"; collapsed: boolean }
   | { kind: "size"; width: number; height: number }
   | { kind: "move"; x: number; y: number }
-  | { kind: "ready" | "recover" | "close" | "dismiss" };
+  | { kind: "save" | "restore" | "ready" | "recover" | "close" | "dismiss" };
 
 interface WebBridge {
   postMessage(request: Action): void;

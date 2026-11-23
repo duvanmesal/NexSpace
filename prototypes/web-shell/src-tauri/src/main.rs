@@ -1,5 +1,8 @@
 #![windows_subsystem = "windows"]
 
+mod core;
+mod stress;
+use core::{cancel_core, core_request, Core, Request};
 use serde::Deserialize;
 use std::{fs, path::PathBuf, sync::Mutex};
 use tauri::window::Color;
@@ -12,11 +15,14 @@ const GROUPS: [&str; 3] = ["files", "games", "apps"];
 struct Session {
     root: PathBuf,
     expanded: Mutex<[f64; 3]>,
+    popover: tokio::sync::Mutex<()>,
 }
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 enum Action {
     Ready,
+    Restore,
+    Save,
     Move { x: i32, y: i32 },
     Size { width: u32, height: u32 },
     Collapse { collapsed: bool },
@@ -69,10 +75,10 @@ fn show(app: &AppHandle, role: &str, group: &str) -> Result<(), String> {
     }
     let exercise = std::env::args().any(|s| s == "--exercise");
     let url = format!(
-        "index.html?role={role}&group={group}&exercise={}",
+        "index.html?role={role}&group={group}&pilot=1&exercise={}",
         u8::from(exercise)
     );
-    let title = format!("NexSpace B · {role}");
+    let title = format!("NexSpace CorePilot · {role}");
     let state = app.state::<Session>();
     WebviewWindowBuilder::new(app, role, WebviewUrl::App(url.into()))
         .title(title)
@@ -91,8 +97,24 @@ fn show(app: &AppHandle, role: &str, group: &str) -> Result<(), String> {
                 && url.path() == "/index.html"
         })
         .build()
-        .map_err(err)?;
+        .map_err(|e| match e {
+            tauri::Error::WindowLabelAlreadyExists(_)
+            | tauri::Error::WebviewLabelAlreadyExists(_) => "label-closing".to_owned(),
+            other => err(other),
+        })?;
     Ok(())
+}
+// Native destruction is asynchronous. The window and WebView labels retire separately.
+async fn reopen(app: &AppHandle, role: &str, group: &str) -> Result<(), String> {
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+    loop {
+        match show(app, role, group) {
+            Err(e) if e == "label-closing" && std::time::Instant::now() < deadline => {
+                tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+            }
+            result => return result,
+        }
+    }
 }
 #[link(name = "dwmapi")]
 extern "system" {
@@ -120,6 +142,43 @@ async fn dispatch(window: WebviewWindow, request: Action) -> Result<Option<Strin
                 return Ok(Some(format!("#{:06x}", color & 0xffffff)));
             }
         }
+        Action::Save if role == "files" => {
+            save_window(&window).await?;
+        }
+        Action::Restore if role == "files" => {
+            let data = app.state::<Core>().call(Request::Load).await?;
+            let p = &data["placement"];
+            let m = app
+                .primary_monitor()
+                .map_err(err)?
+                .ok_or("monitor unavailable")?;
+            let area = m.work_area();
+            let scale = m.scale_factor();
+            let left = area.position.x as f64 / scale;
+            let top = area.position.y as f64 / scale;
+            let width = (p["width"].as_f64().ok_or("invalid-placement")?).clamp(320., 880.);
+            let height = (p["height"].as_f64().ok_or("invalid-placement")?).clamp(220., 680.);
+            state.expanded.lock().map_err(err)?[0] = height;
+            let actual = if data["isCollapsed"] == true {
+                52.
+            } else {
+                height
+            };
+            window
+                .set_size(LogicalSize::new(width, actual))
+                .map_err(err)?;
+            let x = p["x"].as_f64().unwrap_or(left).clamp(
+                left,
+                (left + area.size.width as f64 / scale - width).max(left),
+            );
+            let y = p["y"].as_f64().unwrap_or(top).clamp(
+                top,
+                (top + area.size.height as f64 / scale - actual).max(top),
+            );
+            window
+                .set_position(LogicalPosition::new(x, y))
+                .map_err(err)?;
+        }
         Action::Move { x, y } if index.is_some() => {
             let m = app
                 .primary_monitor()
@@ -140,7 +199,10 @@ async fn dispatch(window: WebviewWindow, request: Action) -> Result<Option<Strin
                 .map_err(err)?;
         }
         Action::Size { width, height } if index.is_some() => {
-            let size = LogicalSize::new(width.clamp(220, 880), height.clamp(150, 680));
+            let size = LogicalSize::new(
+                width.clamp(if role == "files" { 320 } else { 220 }, 880),
+                height.clamp(if role == "files" { 220 } else { 150 }, 680),
+            );
             window.set_size(size).map_err(err)?;
             if let Some(m) = window.current_monitor().map_err(err)? {
                 let scale = m.scale_factor();
@@ -167,6 +229,11 @@ async fn dispatch(window: WebviewWindow, request: Action) -> Result<Option<Strin
                 .inner_size()
                 .map_err(err)?
                 .to_logical::<f64>(window.scale_factor().map_err(err)?);
+            if role == "files" {
+                app.state::<Core>()
+                    .call(Request::Collapse { collapsed })
+                    .await?;
+            }
             let mut heights = state.expanded.lock().map_err(err)?;
             let slot = &mut heights[index.unwrap()];
             if collapsed && size.height > 60. {
@@ -179,30 +246,36 @@ async fn dispatch(window: WebviewWindow, request: Action) -> Result<Option<Strin
                 ))
                 .map_err(err)?;
         }
-        Action::Open { id } if id < 18 && (role == "popup" || index == Some(id as usize / 6)) => {
+        Action::Open { id }
+            if (6..18).contains(&id)
+                && (index == Some(id as usize / 6)
+                    || role == "popup"
+                        && window
+                            .url()
+                            .map_err(err)?
+                            .query_pairs()
+                            .any(|(k, v)| k == "group" && v == GROUPS[id as usize / 6])) =>
+        {
             let path = state.root.join(format!("reference-{id}.txt"));
             open::that_detached(path).map_err(err)?;
         }
         Action::Popover { group } if role == "dock" && GROUPS.contains(&group.as_str()) => {
+            let _transition = state.popover.lock().await;
             if let Some(p) = app.get_webview_window("popup") {
                 p.destroy().map_err(err)?;
             }
-            show(app, "popup", &group)?;
+            reopen(app, "popup", &group).await?;
         }
         Action::Dismiss if role == "dock" || role == "popup" => {
+            let _transition = state.popover.lock().await;
             if let Some(p) = app.get_webview_window("popup") {
                 p.destroy().map_err(err)?;
             }
         }
         Action::Recover => {
-            for (name, w) in app.webview_windows() {
-                if name == "popup" {
-                    w.destroy().map_err(err)?;
-                    continue;
-                }
-                let (x, y, _, _) = layout(app, &name)?;
-                w.set_position(LogicalPosition::new(x, y)).map_err(err)?;
-                w.show().map_err(err)?;
+            recover(app)?;
+            if let Some(files) = app.get_webview_window("files") {
+                save_window(&files).await?;
             }
         }
         Action::Close if role == "dock" || std::env::args().any(|s| s == "--measure") => {
@@ -212,10 +285,89 @@ async fn dispatch(window: WebviewWindow, request: Action) -> Result<Option<Strin
     }
     Ok(None)
 }
+async fn save_window(window: &WebviewWindow) -> Result<(), String> {
+    let scale = window.scale_factor().map_err(err)?;
+    let pos = window
+        .outer_position()
+        .map_err(err)?
+        .to_logical::<i32>(scale);
+    let size = window.inner_size().map_err(err)?.to_logical::<u32>(scale);
+    let expanded = if size.height < 100 {
+        window.state::<Session>().expanded.lock().map_err(err)?[0] as u32
+    } else {
+        size.height
+    };
+    window
+        .state::<Core>()
+        .call(Request::Placement {
+            x: pos.x,
+            y: pos.y,
+            width: size.width.clamp(320, 880),
+            height: expanded.clamp(220, 680),
+        })
+        .await?;
+    Ok(())
+}
+fn recover(app: &AppHandle) -> Result<(), String> {
+    for (name, w) in app.webview_windows() {
+        if name == "popup" {
+            w.destroy().map_err(err)?;
+            continue;
+        }
+        let (x, y, _, _) = layout(app, &name)?;
+        w.set_position(LogicalPosition::new(x, y)).map_err(err)?;
+        w.unminimize().map_err(err)?;
+        w.show().map_err(err)?;
+    }
+    if app.get_webview_window("files").is_none() {
+        show(app, "files", "files")?;
+    }
+    if let Some(w) = app.get_webview_window("files") {
+        w.set_focus().map_err(err)?;
+    }
+    Ok(())
+}
 fn main() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![dispatch])
+        .invoke_handler(tauri::generate_handler![
+            dispatch,
+            core_request,
+            cancel_core
+        ])
+        .manage(Core::default())
         .setup(|app| {
+            use tauri::{
+                menu::{Menu, MenuItem},
+                tray::TrayIconBuilder,
+            };
+            let restore = MenuItem::with_id(
+                app,
+                "recover",
+                "Recuperar ventanas del piloto",
+                true,
+                None::<&str>,
+            )?;
+            let quit = MenuItem::with_id(app, "quit", "Cerrar piloto", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&restore, &quit])?;
+            let mut tray = TrayIconBuilder::new()
+                .tooltip("NexSpace · piloto NexCore")
+                .menu(&menu);
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+            tray.on_menu_event(|app, event| match event.id().as_ref() {
+                "recover" => {
+                    let _ = recover(app);
+                    if let Some(w) = app.get_webview_window("files") {
+                        tauri::async_runtime::spawn(async move {
+                            let _ = save_window(&w).await;
+                        });
+                    }
+                }
+                "quit" => app.exit(0),
+                _ => {}
+            })
+            .build(app)?;
             let root = std::env::temp_dir().join(format!(
                 "NexSpace-WebLab-B-{}-{}",
                 std::process::id(),
@@ -233,6 +385,7 @@ fn main() {
             app.manage(Session {
                 root,
                 expanded: Mutex::new([272.; 3]),
+                popover: Default::default(),
             });
             for role in ["files", "games", "apps", "dock"] {
                 if std::env::args().any(|s| s == "--one") && role != "files" {
@@ -242,6 +395,36 @@ fn main() {
                     continue;
                 }
                 show(app.handle(), role, "files")?;
+            }
+            if std::env::args().any(|s| s == "--faults") {
+                let app = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let path = app.state::<Session>().root.join("files.ready");
+                    for _ in 0..200 {
+                        if path.exists() {
+                            break;
+                        }
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    }
+                    let tested = app.state::<Core>().verify_disconnect().await;
+                    let _ = fs::write(
+                        app.state::<Session>().root.join("reconnect.result"),
+                        format!("{:?}", tested),
+                    );
+                    app.exit(if tested.is_ok() { 0 } else { 1 });
+                });
+            }
+            if std::env::args().any(|s| s == "--stress") {
+                let handle = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let result = stress::run(handle.clone()).await;
+                    if let Err(e) = result {
+                        let _ = fs::write(handle.state::<Session>().root.join("stress.error"), e);
+                        handle.exit(1)
+                    } else {
+                        handle.exit(0)
+                    }
+                });
             }
             Ok(())
         })

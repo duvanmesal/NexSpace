@@ -15,10 +15,13 @@ $samples=@()
 $popupRevisions=[Collections.Generic.HashSet[long]]::new()
 $seen=@{}
 function Sample([string]$stage){
- $procs=Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId
- $ids=@($process.Id)
+ $procs=Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,CreationDate
+ # El PID padre puede reutilizarse mientras un hijo anterior sigue vivo.
+    $created=@{}
+    foreach($row in $procs){$created[$row.ProcessId]=$row.CreationDate}
+    $ids=@($process.Id)
  for($depth=0;$depth -lt 8;$depth++){
-   $next=@($procs|where { $_.ParentProcessId -in $ids -and $_.ProcessId -notin $ids }|% ProcessId)
+   $next=@($procs|where { $_.ParentProcessId -in $ids -and $_.ProcessId -notin $ids -and $_.CreationDate -ge $created[$_.ParentProcessId] }|% ProcessId)
    if(!$next.Count){break};$ids+=$next
  }
  $rows=@(foreach($id in $ids){$p=Get-Process -Id $id -ea SilentlyContinue

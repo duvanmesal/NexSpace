@@ -13,7 +13,39 @@ import {
   Pin,
 } from "lucide-react";
 import { send, type Group, type Action } from "./host";
+import { invoke } from "@tauri-apps/api/core";
 import "./style.css";
+interface Entry {
+  id: string;
+  name: string;
+  exists: boolean;
+  icon: string | null;
+}
+interface Snapshot {
+  items: Entry[];
+  isCollapsed: boolean;
+}
+type LibraryAction =
+  | { op: "load" | "list" }
+  | { op: "open"; item: string }
+  | { op: "rename"; item: string; name: string }
+  | { op: "reorder"; item: string; offset: number };
+function request<T>(action: LibraryAction) {
+  return invoke<T>("core_request", { request: action });
+}
+function describe(code: unknown) {
+  const errors: Record<string, string> = {
+    missing: "Ya no se encuentra el archivo.",
+    "invalid-name": "Introduce un nombre válido.",
+    "not-movable": "La referencia ya está en ese extremo.",
+    cancelled: "Operación cancelada.",
+    "unknown-reference": "La referencia ya no está disponible.",
+  };
+  return (
+    errors[String(code)] ||
+    "NexCore no pudo completar la operación. Vuelve a cargar Archivos."
+  );
+}
 
 const library = {
   files: {
@@ -77,6 +109,37 @@ function Shell() {
   const [list, setList] = useState(localStorage.getItem("view") === "list");
   const [message, setMessage] = useState(""),
     [active, setActive] = useState("");
+  const connected =
+    query.get("pilot") === "1" && group === "files" && role !== "dock";
+  const [items, setItems] = useState<Entry[]>([]);
+  const [loading, setLoading] = useState(connected);
+  const [selected, select] = useState("");
+  const [name, setName] = useState("");
+  async function refresh(initial = false) {
+    setLoading(true);
+    try {
+      if (initial && role === "files") await send({ kind: "restore" });
+      const data = await request<Snapshot>({ op: "load" });
+      setItems(data.items);
+      if (role === "files") collapse(data.isCollapsed);
+      setMessage("");
+      return true;
+    } catch (e) {
+      setMessage(describe(e));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }
+  async function edit(action: LibraryAction) {
+    try {
+      await request(action);
+      await refresh();
+      select("");
+    } catch (e) {
+      setMessage(describe(e));
+    }
+  }
   const run = (cmd: Action) => {
     void send(cmd).catch(() => setMessage("No se pudo completar la acción."));
   };
@@ -117,9 +180,15 @@ function Shell() {
         { once: true },
       );
     }
-    requestAnimationFrame(() =>
-      requestAnimationFrame(() => run({ kind: "ready" })),
-    );
+    const ready = () =>
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => run({ kind: "ready" })),
+      );
+    if (connected)
+      void refresh(true).then((ok) => {
+        if (ok) ready();
+      });
+    else ready();
     const timers: number[] = [];
     if (query.get("exercise") === "1") {
       const at = (ms: number, fn: () => void) =>
@@ -182,9 +251,10 @@ function Shell() {
     </button>
   );
   const toggle = () => {
-    collapse(!collapsed);
     setMenu(false);
-    run({ kind: "collapse", collapsed: !collapsed });
+    void send({ kind: "collapse", collapsed: !collapsed })
+      .then(() => collapse(!collapsed))
+      .catch((e) => setMessage(describe(e)));
   };
   if (role === "dock")
     return (
@@ -254,6 +324,7 @@ function Shell() {
             });
         }}
         onLostPointerCapture={() => {
+          if (handle.current && connected) run({ kind: "save" });
           handle.current = null;
         }}
       >
@@ -274,6 +345,29 @@ function Shell() {
       </header>
       {menu && (
         <aside>
+          {connected && (
+            <label>
+              Editar referencia{" "}
+              <select
+                value={selected}
+                onChange={(e) => {
+                  const item = items.find((i) => i.id === e.target.value);
+                  if (item) {
+                    select(item.id);
+                    setName(item.name);
+                    setMenu(false);
+                  }
+                }}
+              >
+                <option value="">Elegir…</option>
+                {items.map((i) => (
+                  <option key={i.id} value={i.id}>
+                    {i.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           {tools("Recuperar ventanas", <>Restablecer posición</>, () => {
             run({ kind: "recover" });
             setMenu(false);
@@ -285,16 +379,45 @@ function Shell() {
           aria-label={data.label}
           className={popup || list ? "rows" : "tiles"}
         >
-          {data.names.map((name, i) => (
-            <button
-              key={name}
-              title={"Abrir ficha de " + name}
-              onClick={() => open(i)}
-            >
-              <Art name={data.art[i]} />
-              <span>{name}</span>
-            </button>
-          ))}
+          {connected &&
+            items.map((entry) => (
+              <button
+                key={entry.id}
+                title={entry.name}
+                onClick={() => void edit({ op: "open", item: entry.id })}
+                onContextMenu={(e) => {
+                  if (role === "files") {
+                    e.preventDefault();
+                    select(entry.id);
+                    setName(entry.name);
+                  }
+                }}
+              >
+                {entry.icon ? (
+                  <img className="art" src={entry.icon} alt="" />
+                ) : (
+                  <Art name="document" />
+                )}
+                <span>
+                  {entry.name}
+                  {!entry.exists && " · Sin archivo"}
+                </span>
+              </button>
+            ))}
+          {connected && loading && (
+            <span role="status">Cargando Archivos…</span>
+          )}
+          {!connected &&
+            data.names.map((name, i) => (
+              <button
+                key={name}
+                title={"Abrir ficha de " + name}
+                onClick={() => open(i)}
+              >
+                <Art name={data.art[i]} />
+                <span>{name}</span>
+              </button>
+            ))}
         </section>
       )}
       {!popup && !collapsed && (
@@ -320,6 +443,7 @@ function Shell() {
               });
           }}
           onLostPointerCapture={() => {
+            if (drag.current && connected) run({ kind: "save" });
             drag.current = null;
           }}
           onKeyDown={(e) => {
@@ -332,18 +456,68 @@ function Shell() {
             const d = deltas[e.key];
             if (d) {
               e.preventDefault();
-              run({
+              void send({
                 kind: "size",
                 width: innerWidth + d[0],
                 height: innerHeight + d[1],
-              });
+              })
+                .then(() => (connected ? send({ kind: "save" }) : undefined))
+                .catch((e) => setMessage(describe(e)));
             }
           }}
         >
           <Grip size={13} />
         </button>
       )}
-      {message && <output role="alert">{message}</output>}
+      {selected && (
+        <aside aria-label="Editar referencia">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void edit({ op: "rename", item: selected, name });
+            }}
+          >
+            <label>
+              Nombre{" "}
+              <input
+                value={name}
+                maxLength={260}
+                onChange={(e) => setName(e.target.value)}
+                autoFocus
+              />
+            </label>
+            <button type="submit">Guardar</button>
+          </form>
+          <button
+            onClick={() =>
+              void edit({ op: "reorder", item: selected, offset: -1 })
+            }
+          >
+            Mover antes
+          </button>
+          <button
+            onClick={() =>
+              void edit({ op: "reorder", item: selected, offset: 1 })
+            }
+          >
+            Mover después
+          </button>
+          <button onClick={() => select("")}>Cerrar</button>
+        </aside>
+      )}
+      {connected && loading && role === "files" && (
+        <button className="cancel" onClick={() => void invoke("cancel_core")}>
+          Cancelar carga
+        </button>
+      )}
+      {message && (
+        <output role="alert">
+          {message}{" "}
+          {connected && (
+            <button onClick={() => void refresh(true)}>Recargar</button>
+          )}
+        </output>
+      )}
     </main>
   );
 }
