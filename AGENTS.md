@@ -32,3 +32,10 @@ Visual principal: `assets/references/concepts/03_C_sistema_hibrido_APROBADO.png`
 - No modificar las decisiones aprobadas sin solicitar aprobación.
 - Al cerrar Fase 1, actualizar propuesta, arquitectura, ADR aplicable y matriz de validación. Separar pruebas automatizadas, smoke tests y evidencia manual reportada/pendiente; dar pasos precisos para validación visual.
 - Al terminar Fase 4, resumir evidencia, artefactos, rendimiento, riesgos y checklist de aceptación humana. No habilitar inicio Windows durante pruebas ni instalar certificados/paquetes sin autorización adicional.
+
+## Ramas y entorno principal
+
+- Trabajar habitualmente desde la raíz NEXSPACE. Consultar la tabla de ramas y los comandos de compilación, pruebas, WinUI y laboratorio en README.md.
+- La aplicación de producción usa WinUI. La candidata de integración está en `integration/concept-c-phase41`. Mantener el laboratorio A/B en `codex/web-shell-lab` y el piloto NexCore en `experiment/tauri-nexcore`. La aceptación de una rama es independiente de su publicación.
+- Antes de cambiar de revisión consultar estado y worktrees. Se puede probar una rama ocupada desde la raíz en modo detached y crear una rama nueva para ediciones. Conservar configuraciones locales, bases y evidencia privada fuera del índice.
+- Para la consolidación se autorizó publicar las ramas históricas auditadas de diseño, integración y laboratorio A/B. El piloto queda local. Promover la candidata a main, retirar worktrees y crear releases requieren decisiones separadas.

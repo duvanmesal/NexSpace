@@ -2,7 +2,44 @@
 
 NexSpace es un organizador modular para el escritorio de Windows 11. La dirección visual aprobada combina contenedores compactos con un dock flotante opcional, siguiendo el concepto C de `assets/references/concepts/03_C_sistema_hibrido_APROBADO.png`.
 
-El repositorio contiene Fases 1 y 2 aceptadas condicionalmente y **Fase 3 · perfiles y temas**, pendiente de aceptación. Un proceso comparte contenedores FLOATING, dock, Manager, perfiles manuales, temas, SQLite v3, bandeja y recuperación. Las referencias nunca alteran originales. Drag-and-drop físico, accesibilidad integral, DPI/multimonitor, translucidez, animación y perfilado prolongado siguen pendientes; DESKTOP está deshabilitado.
+El repositorio contiene Fases 1, 2 y 3 aceptadas condicionalmente. La **Fase 4.1** conserva pendientes de estabilidad. Un proceso comparte contenedores FLOATING, dock, Manager, perfiles manuales, temas, SQLite v3, bandeja y recuperación. Las referencias nunca alteran originales. Drag-and-drop físico, accesibilidad integral, DPI/multimonitor, translucidez, animación y perfilado prolongado siguen pendientes; DESKTOP está deshabilitado.
+
+## Trabajo desde una sola carpeta
+
+Abre PowerShell en `Documents/NEXSPACE`. Cada worktree comparte objetos y ramas con esta carpeta. El código WinUI vive en `src/`, las pruebas en `tests/`, los diagnósticos en `tools/`, las decisiones en `docs/` y las referencias aprobadas en `assets/`. Los experimentos viven en `prototypes/web-shell/` en sus propias ramas.
+
+| Rama | Uso |
+|---|---|
+| `origin/main` | Base publicada de Windows 11. Consultar el SHA remoto antes de distribuir. |
+| `main` local | Contiene también estabilización de Fase 4.1 anterior a la aceptación final. |
+| `design/nexspace-ux-refresh` | Historial de diseño del Concepto C. |
+| `integration/concept-c-phase41` | Candidata WinUI que reúne ambos historiales. |
+| `codex/web-shell-lab` | Comparación A/B de WebView2 y Tauri. |
+| `experiment/tauri-nexcore` | Piloto local de Tauri con servicios .NET y SQLite de demostración. |
+
+Desde la raíz se pueden consultar todas las ramas sin abrir las otras carpetas.
+
+```powershell
+git status --short --branch
+git worktree list
+git fetch origin
+git branch -vv
+git log --oneline --graph --decorate --all -35
+git ls-remote --heads origin
+```
+
+Para revisar una rama ocupada en otro worktree, comprueba primero el estado y los archivos locales sin seguimiento. Con el trabajo guardado, usa `git switch --detach codex/web-shell-lab` para ejecutar el laboratorio desde esta carpeta. Para editar, crea una rama de trabajo con `git switch -c work/mi-cambio codex/web-shell-lab`. Si Git informa una colisión, preserva los archivos locales antes de continuar. `git switch -` vuelve a la revisión anterior.
+
+En la rama del laboratorio, con Node, Rust y el SDK .NET disponibles, ejecuta:
+
+```powershell
+./prototypes/web-shell/Build.ps1
+& ./artifacts/web-lab/A/NexSpace.WebLab.exe
+# Cierra A antes de iniciar B.
+& ./artifacts/web-lab/B/nexspace-tauri-lab.exe
+```
+
+La rama del piloto contiene sus instrucciones en `prototypes/web-shell/PILOTO.md`. Mantén los ejecutables, bibliotecas de prueba, capturas y mediciones privadas en `artifacts/`. El lanzamiento WinUI unpackaged y las pruebas se describen más abajo.
 
 ## Principios del producto
 
@@ -91,6 +128,6 @@ Antes de publicar, revisar `git status`, `git diff --cached` y la lista de archi
 - `docs/phase-0/PLAN_Y_CRITERIOS.md`: plan y matriz de evidencia de Fase 0.
 - `assets/references/README.md`: guía de referencias visuales.
 
-Fases 2 y 3 aceptadas condicionalmente y publicadas. Fase 4 autorizada para estabilización y preparación de distribución; sus cambios son únicamente locales. No es una declaración de disponibilidad de NexSpace 1.0. Inicio con Windows desactivado por defecto; no activado en pruebas. Estado y pendientes en [roadmap](docs/ROADMAP.md).
+Fases 2 y 3 aceptadas condicionalmente y publicadas. Fase 4 autorizada para estabilización y preparación de distribución. La publicación de ramas de investigación requiere revisar su historial y verificar el SHA remoto. No es una declaración de disponibilidad de NexSpace 1.0. Inicio con Windows desactivado por defecto; no activado en pruebas. Estado y pendientes en [roadmap](docs/ROADMAP.md).
 
 Preparación de la candidata: [instalación y distribución](docs/phase-4/DISTRIBUCION.md), [uso y recuperación](docs/phase-4/USO_Y_RECUPERACION.md), [diagnóstico y aceptación](docs/testing/PHASE4_VALIDATION.md).
