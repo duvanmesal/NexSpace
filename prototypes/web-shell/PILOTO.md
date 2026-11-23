@@ -8,10 +8,10 @@ Se necesitan los mismos Node, Rust, enlazador Windows x64, WebView2 Evergreen y 
 
 ```powershell
 ./prototypes/web-shell/Build-Pilot.ps1 -DemoDatabase $rutaBaseDeDemostracion
-& ./artifacts/web-lab/B/nexspace-tauri-lab.exe
+& ./artifacts/tauri-nexcore/B/nexspace-tauri-lab.exe
 ```
 
-`-DemoDatabase` acepta una biblioteca **de demostración**. El preparador la abre en modo de solo lectura y usa SQLite Backup para obtener una instantánea consistente. Sin ese argumento, inicializa una biblioteca de fixtures. Añade un contenedor Archivos de prueba con cinco TXT y una referencia ausente. Las fichas, los identificadores y la copia permanecen bajo `artifacts/web-lab/B/pilot-data/`. Ejecutar de nuevo conserva el estado. Una inicialización interrumpida exige preparar otro directorio de salida o revisar la copia incompleta. El EXE autocontenido del sidecar está en `B/core/`.
+`-DemoDatabase` acepta una biblioteca **de demostración**. El preparador la abre en modo de solo lectura y usa SQLite Backup para obtener una instantánea consistente. Sin ese argumento, inicializa una biblioteca de fixtures. Añade un contenedor Archivos de prueba con cinco TXT y una referencia ausente. Las fichas, los identificadores y la copia permanecen bajo `artifacts/tauri-nexcore/B/pilot-data/`. Ejecutar de nuevo conserva el estado. Una inicialización interrumpida exige preparar otro directorio de salida o revisar la copia incompleta. El EXE autocontenido del sidecar está en `B/core/`.
 
 En Archivos, un clic abre la referencia según su asociación Windows. El menú del encabezado permite elegir una referencia para editar su etiqueta o cambiar su orden. También se abre el editor con el menú contextual de una ficha. Arrastrar el encabezado mueve la ventana. El tirador ajusta el tamaño y admite flechas de teclado. La opción **Recuperar ventanas del piloto** está en la bandeja, fuera de los WebViews. El botón de apagado del dock y la opción **Cerrar piloto** terminan la sesión.
 
@@ -40,11 +40,11 @@ python -X utf8 prototypes/web-shell/bench/Test-Recovery.py
 ./prototypes/web-shell/bench/Measure.ps1 B exercise -Capture
 ./prototypes/web-shell/bench/Test-Lifecycle.ps1 stress
 ./prototypes/web-shell/bench/Test-Lifecycle.ps1 startups
-$p = Start-Process ./artifacts/web-lab/B/nexspace-tauri-lab.exe -ArgumentList '--one','--faults' -PassThru
+$p = Start-Process ./artifacts/tauri-nexcore/B/nexspace-tauri-lab.exe -ArgumentList '--one','--faults' -PassThru
 $p.WaitForExit(30000)
 $p.ExitCode
 ```
 
-`Test-Core.py` abre una ficha TXT mediante el Shell y restaura orden, etiqueta y presentación al finalizar. Las escenas guardan JSON y, opcionalmente, capturas privadas en `artifacts/web-lab/evidence/`. `--faults` termina únicamente el hijo propio, verifica el fallo de la solicitud siguiente y exige que una nueva conexión recupere el mismo objeto. La serie de estrés espera que React confirme una nueva carga con datos para cada apertura. El muestreo del árbol usa parentesco de procesos, memoria privada y WS agregados, CPU, handles, GDI, USER y un censo acotado de Composition/Event. El WS agregado incluye páginas compartidas. Los cierres se evalúan por PID y hora de creación de procesos observados.
+`Test-Core.py` abre una ficha TXT mediante el Shell y restaura orden, etiqueta y presentación al finalizar. Las escenas guardan JSON y, opcionalmente, capturas privadas en `artifacts/tauri-nexcore/evidence/`. `--faults` termina únicamente el hijo propio, verifica el fallo de la solicitud siguiente y exige que una nueva conexión recupere el mismo objeto. La serie de estrés espera que React confirme una nueva carga con datos para cada apertura. El muestreo del árbol usa parentesco de procesos, memoria privada y WS agregados, CPU, handles, GDI, USER y un censo acotado de Composition/Event. El WS agregado incluye páginas compartidas. Los cierres se evalúan por PID y hora de creación de procesos observados.
 
 La decisión de migración y las cifras de esta ejecución se encuentran en [la validación del piloto](VALIDACION_PILOTO.md).

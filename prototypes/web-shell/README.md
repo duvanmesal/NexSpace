@@ -1,5 +1,8 @@
 # Laboratorio NexSpace · Concepto C
 
+**Rama del piloto NexCore.** Para compilar y ejecutar esta revisión, sigue [PILOTO.md](PILOTO.md) y consulta [la validación](VALIDACION_PILOTO.md). Las instrucciones de comparación A/B que siguen corresponden a la rama histórica `codex/web-shell-lab`.
+
+
 Dos anfitriones Windows x64 abren el mismo bundle de producción de React, TypeScript, Vite y Tailwind. Cada contenedor, el dock y el popover son ventanas independientes. El diseño está en `src/`, la entrada .NET en `host/` y la entrada Tauri en `src-tauri/`. [Contrato visual](../../assets/references/concepts/03_C_sistema_hibrido_APROBADO.png).
 
 ## Ejecutar

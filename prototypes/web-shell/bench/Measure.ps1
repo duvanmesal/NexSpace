@@ -1,11 +1,12 @@
 param([ValidateSet('A','B')]$HostType,[ValidateSet('one','three','exercise')]$Scene,[switch]$Capture)
 $ErrorActionPreference='Stop'
 $base=(Resolve-Path "$PSScriptRoot/..").Path
-$out=Join-Path $base "../../artifacts/web-lab/evidence"
+$labDir=if($HostType -eq 'B'){'tauri-nexcore'}else{'web-lab'}
+$out=Join-Path $base "../../artifacts/$labDir/evidence"
 New-Item -Type Directory -Force $out|Out-Null
 Add-Type -Path "$PSScriptRoot/Counters.cs"
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
-$exe=if($HostType -eq 'A'){"$base/../../artifacts/web-lab/A/NexSpace.WebLab.exe"}else{"$base/../../artifacts/web-lab/B/nexspace-tauri-lab.exe"}
+$exe=if($HostType -eq 'A'){"$base/../../artifacts/web-lab/A/NexSpace.WebLab.exe"}else{"$base/../../artifacts/$labDir/B/nexspace-tauri-lab.exe"}
 $timer=[Diagnostics.Stopwatch]::StartNew()
 $start=Get-Date
 $process=Start-Process -FilePath $exe -ArgumentList "--$Scene","--measure" -WorkingDirectory (Split-Path $exe) -PassThru

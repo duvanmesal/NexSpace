@@ -1,7 +1,7 @@
 param([string]$DotNet='dotnet',[string]$Cargo='cargo',[string]$DemoDatabase)
 $ErrorActionPreference='Stop'
 $source = (Resolve-Path $PSScriptRoot).Path
-$out = [IO.Path]::GetFullPath("$source/../../artifacts/web-lab/B")
+$out = [IO.Path]::GetFullPath("$source/../../artifacts/tauri-nexcore/B")
 if($DemoDatabase){$DemoDatabase=(Resolve-Path -LiteralPath $DemoDatabase).Path}
 Push-Location $source
 try {

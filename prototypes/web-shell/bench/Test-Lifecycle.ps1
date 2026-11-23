@@ -1,6 +1,6 @@
 param([ValidateSet('startups','stress')][string]$Scenario='startups')
 $ErrorActionPreference='Stop'
-$base=[IO.Path]::GetFullPath("$PSScriptRoot/../../../artifacts/web-lab")
+$base=[IO.Path]::GetFullPath("$PSScriptRoot/../../../artifacts/tauri-nexcore")
 $exe="$base/B/nexspace-tauri-lab.exe"
 $out="$base/evidence"
 New-Item -ItemType Directory -Force $out | Out-Null

@@ -4,7 +4,7 @@ import hashlib
 import json
 import subprocess
 
-base = Path(__file__).resolve().parents[3] / "artifacts/web-lab/B"
+base = Path(__file__).resolve().parents[3] / "artifacts/tauri-nexcore/B"
 exe = base / "core/NexSpace.CorePilot.exe"
 counter = 0
 

@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 import time
 
-base = pathlib.Path(__file__).resolve().parents[3] / "artifacts/web-lab/B"
+base = pathlib.Path(__file__).resolve().parents[3] / "artifacts/tauri-nexcore/B"
 exe = base / "nexspace-tauri-lab.exe"
 proc = subprocess.Popen([exe, "--validate"], cwd=base)
 def wait_for(find, seconds=25):

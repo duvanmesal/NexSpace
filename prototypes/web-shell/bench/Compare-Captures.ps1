@@ -1,6 +1,6 @@
 param([Parameter(Mandatory)][string]$BaselineExe)
 $ErrorActionPreference='Stop'
-$base=[IO.Path]::GetFullPath("$PSScriptRoot/../../../artifacts/web-lab")
+$base=[IO.Path]::GetFullPath("$PSScriptRoot/../../../artifacts/tauri-nexcore")
 $out="$base/evidence/comparacion"
 New-Item -ItemType Directory -Force $out|Out-Null
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing

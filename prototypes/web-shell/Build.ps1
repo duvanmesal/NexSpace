@@ -1,16 +1,4 @@
-param([string]$DotNet='dotnet',[string]$Cargo='cargo')
-$ErrorActionPreference='Stop'
-Push-Location $PSScriptRoot
-try{
- $out=[IO.Path]::GetFullPath("$PSScriptRoot/../../artifacts/web-lab")
- & npm.cmd ci --no-audit
- if($LASTEXITCODE){throw 'npm ci failed'}
- & npm.cmd run build
- if($LASTEXITCODE){throw 'React build failed'}
- & $DotNet publish host/NexSpace.WebLab.csproj -c Release -r win-x64 --self-contained true -o "$out/A"
- if($LASTEXITCODE){throw '.NET publish failed'}
- & $Cargo build --locked --release --manifest-path src-tauri/Cargo.toml
- if($LASTEXITCODE){throw 'Cargo build failed'}
- New-Item "$out/B" -ItemType Directory -Force|Out-Null
- Copy-Item src-tauri/target/release/nexspace-tauri-lab.exe,src-tauri/target/release/WebView2Loader.dll "$out/B" -Force
-}finally{Pop-Location}
+# En esta rama la entrada de compilación genera el piloto conectado a NexCore.
+# El comparador original A/B se conserva en codex/web-shell-lab.
+param([string]$DotNet='dotnet',[string]$Cargo='cargo',[string]$DemoDatabase)
+& "$PSScriptRoot/Build-Pilot.ps1" @PSBoundParameters

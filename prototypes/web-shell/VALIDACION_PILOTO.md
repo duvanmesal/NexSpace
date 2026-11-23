@@ -20,7 +20,7 @@ En la base local de Fase 4.1, la solución WinUI compiló Release x64 y pasaron 
 
 ## Recursos del árbol completo
 
-Medición del 23 de noviembre con el censo de procesos del laboratorio. Incluye el host Tauri, WebView2, conhost y un único NexCore. La primera disponibilidad puede corresponder a otra ventana. Archivos solo emite su confirmación tras leer la biblioteca. Los registros crudos se conservan bajo `artifacts/web-lab/evidence/` fuera de Git. Las series se tomaron antes de añadir el escenario nativo adicional `--validate`, que solo se activa por argumento.
+Medición del 23 de noviembre con el censo de procesos del laboratorio. Incluye el host Tauri, WebView2, conhost y un único NexCore. La primera disponibilidad puede corresponder a otra ventana. Archivos solo emite su confirmación tras leer la biblioteca. Los registros crudos se conservan bajo `artifacts/tauri-nexcore/evidence/` fuera de Git. Las series se tomaron antes de añadir el escenario nativo adicional `--validate`, que solo se activa por argumento.
 
 | Escena | Primera / todas listas (s) | Procesos | Privada / WS agregados (MiB) | Handles | GDI / USER | Composition / Event | CPU reposo (% de un núcleo) |
 |---|---:|---:|---:|---:|---:|---:|---:|
