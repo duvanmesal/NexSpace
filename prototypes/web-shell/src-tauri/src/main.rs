@@ -2,6 +2,7 @@
 
 mod core;
 mod stress;
+mod validation;
 use core::{cancel_core, core_request, Core, Request};
 use serde::Deserialize;
 use std::{fs, path::PathBuf, sync::Mutex};
@@ -395,6 +396,17 @@ fn main() {
                     continue;
                 }
                 show(app.handle(), role, "files")?;
+            }
+            if std::env::args().any(|s| s == "--validate") {
+                let app = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let result = validation::validate(&app).await;
+                    let _ = fs::write(
+                        app.state::<Session>().root.join("validation.result"),
+                        format!("{:?}", result),
+                    );
+                    app.exit(if result.is_ok() { 0 } else { 1 });
+                });
             }
             if std::env::args().any(|s| s == "--faults") {
                 let app = app.handle().clone();
