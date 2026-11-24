@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
 mod core;
+mod floating;
 mod stress;
 mod validation;
 use core::{cancel_core, core_request, Core, Request};
@@ -329,6 +330,10 @@ fn recover(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 fn main() {
+    if !std::env::args().any(|s| s == "--legacy") {
+        floating::run();
+        return;
+    }
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             dispatch,

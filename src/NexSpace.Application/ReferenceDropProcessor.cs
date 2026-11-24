@@ -13,18 +13,24 @@ public sealed class ReferenceDropProcessor(ContainerService service)
 {
     public static bool CanAccept(bool hasStorageItems) => hasStorageItems;
 
+    public static ContainerItemKind Kind(ReferenceDropEntry entry)
+    {
+        if (entry.IsFolder) return ContainerItemKind.Folder;
+        return Path.GetExtension(entry.Path).ToLowerInvariant() switch
+        {
+            ".lnk" => ContainerItemKind.Shortcut,
+            ".exe" => ContainerItemKind.Application,
+            _ => ContainerItemKind.File
+        };
+    }
+
     public ReferenceDropResult Process(Guid containerId, IEnumerable<ReferenceDropEntry> entries)
     {
         var added = 0;
         var errors = new List<string>();
         foreach (var entry in entries)
         {
-            var kind = entry.IsFolder ? ContainerItemKind.Folder : Path.GetExtension(entry.Path).ToLowerInvariant() switch
-            {
-                ".lnk" => ContainerItemKind.Shortcut,
-                ".exe" => ContainerItemKind.Application,
-                _ => ContainerItemKind.File
-            };
+            var kind = Kind(entry);
             var result = service.AddReference(containerId, kind, entry.Path, entry.Name);
             if (result.Succeeded) added++; else errors.Add(result.Code);
         }

@@ -10,6 +10,7 @@ using NexSpace.Windows;
 
 Console.InputEncoding = Console.OutputEncoding = new UTF8Encoding(false);
 var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "pilot-data"));
+if(args.FirstOrDefault() is "--floating" or "--prepare-floating"){ FloatingLibrary.Start(args,root); return; }
 var db = Path.Combine(root, "library.db");
 var marker = Path.Combine(root, "container.id");
 var service = new ContainerService(new SqliteContainerRepository(db));

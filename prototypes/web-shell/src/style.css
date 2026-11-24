@@ -176,7 +176,7 @@ header:focus-within button {
   background: var(--rule);
   margin: 0 6px;
 }
-.selected:after {
+.dock .selected:after {
   content: "";
   width: 5px;
   height: 5px;
@@ -222,7 +222,7 @@ header:focus-within button {
   border-radius: 5px;
   font-size: 13px;
 }
-.rows img {
+.rows .art {
   width: 23px;
   height: 23px;
 }
@@ -248,7 +248,159 @@ output {
   header {
     border-color: CanvasText;
   }
-  .selected:after {
+  .dock .selected:after {
     background: Highlight;
   }
+}
+
+.side-popup {
+  margin: 0 0 0 10px;
+  width: calc(100% - 10px);
+  height: 100%;
+}
+.side-popup:after {
+  left: -7px;
+  top: calc(50% - 7px);
+  bottom: auto;
+  transform: rotate(135deg);
+}
+.setting {
+  flex-wrap: wrap;
+}
+.setting select {
+  max-width: 150px;
+}
+.floating-dock,
+.categories,
+.organizer nav,
+.organizer footer,
+.setting,
+.editor div {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.floating-dock {
+  padding: 5px 8px;
+  justify-content: center;
+}
+.categories {
+  min-width: 0;
+  overflow: auto;
+  scrollbar-width: none;
+}
+.floating-dock.vertical,
+.vertical .categories {
+  flex-direction: column;
+}
+.vertical .categories {
+  min-height: 0;
+}
+.floating-dock button {
+  flex-shrink: 0;
+}
+.glyph {
+  font:
+    24px "Segoe Fluent Icons",
+    "Segoe MDL2 Assets";
+}
+.vertical i {
+  width: 32px;
+  height: 1px;
+}
+.organizer {
+  --wash: rgba(24, 28, 34, 0.96);
+  display: flex;
+  flex-direction: column;
+}
+.organizer nav,
+.organizer footer,
+.organizer section {
+  padding: 10px 14px;
+}
+.organizer section {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+.organizer footer {
+  justify-content: space-between;
+  border-top: 1px solid var(--rule);
+}
+.setting {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.setting span {
+  flex: 1;
+}
+.organizer button,
+.choices button,
+.editor button,
+.paging button {
+  border-radius: 5px;
+  padding: 5px 8px;
+}
+.choices,
+.editor {
+  position: absolute;
+  z-index: 3;
+  right: 8px;
+  top: 36px;
+  max-height: calc(100% - 38px);
+  display: grid;
+  gap: 3px;
+  overflow: auto;
+  background: Canvas;
+  color: CanvasText;
+  border: 1px solid var(--edge);
+  padding: 9px;
+  border-radius: 9px;
+}
+.editor {
+  left: 12px;
+  right: 12px;
+}
+.editor input,
+.organizer select {
+  color: CanvasText;
+  background: Canvas;
+  border: 1px solid var(--edge);
+  padding: 4px;
+}
+.panel.collapsed .choices,
+.panel.collapsed .editor {
+  display: none;
+}
+.tiles span,
+.rows span,
+header h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.rows {
+  overflow: auto;
+  max-height: calc(100% - 45px);
+}
+.paging {
+  position: absolute;
+  bottom: 4px;
+  left: 8px;
+  background: Canvas;
+  color: CanvasText;
+}
+.glass:has(.paging) section {
+  max-height: calc(100% - 84px);
+}
+.glass output {
+  z-index: 5;
+}
+.floating-dock output {
+  inset: 0;
+  font-size: 12px;
+  overflow: auto;
+}
+.grip,
+header {
+  touch-action: none;
 }

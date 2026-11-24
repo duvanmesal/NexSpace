@@ -6,7 +6,10 @@
     "games",
     "apps",
     "dock",
-    "popup"
+    "popup",
+    "group_*",
+    "category_*",
+    "organize"
   ],
   "permissions": []
 }

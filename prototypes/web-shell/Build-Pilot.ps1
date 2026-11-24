@@ -14,7 +14,7 @@ try {
     & $DotNet publish core/NexSpace.CorePilot.csproj -c Release --self-contained true -o "$out/core"
     if($LASTEXITCODE){throw 'NexCore'}
     Copy-Item src-tauri/target/release/nexspace-tauri-lab.exe,src-tauri/target/release/WebView2Loader.dll $out
-    $argsCore=@('--prepare')
+    $argsCore=@('--prepare-floating')
     if($DemoDatabase){$argsCore+=$DemoDatabase}
     & "$out/core/NexSpace.CorePilot.exe" @argsCore
     if($LASTEXITCODE){throw 'Preparación SQLite'}

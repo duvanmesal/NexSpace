@@ -45,7 +45,7 @@ struct Pipe {
     output: BufReader<ChildStdout>,
 }
 impl Pipe {
-    fn start() -> Result<Self, String> {
+    fn start(floating: bool) -> Result<Self, String> {
         let base = std::env::current_exe().map_err(|_| "core-path")?;
         let dir = base.parent().ok_or("core-path")?;
         let log = std::fs::OpenOptions::new()
@@ -53,7 +53,11 @@ impl Pipe {
             .append(true)
             .open(dir.join("pilot-data/core.log"))
             .map_err(|_| "core-unprepared")?;
-        let mut child = Command::new(dir.join("core/NexSpace.CorePilot.exe"))
+        let mut cmd = Command::new(dir.join("core/NexSpace.CorePilot.exe"));
+        if floating {
+            cmd.arg("--floating");
+        }
+        let mut child = cmd
             .creation_flags(0x08000000)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -67,12 +71,11 @@ impl Pipe {
             child,
         })
     }
-    async fn exchange(&mut self, id: u64, req: Request) -> Result<Value, String> {
-        let mut msg = serde_json::to_value(req).map_err(|_| "invalid-request")?;
+    async fn exchange(&mut self, id: u64, mut msg: Value, version: u8) -> Result<Value, String> {
         msg["id"] = json!(id);
-        msg["v"] = json!(1);
+        msg["v"] = json!(version);
         let mut bytes = msg.to_string().into_bytes();
-        if bytes.len() > 2048 {
+        if bytes.len() > 32768 {
             return Err("message-too-large".into());
         }
         bytes.push(b'\n');
@@ -90,13 +93,14 @@ impl Pipe {
             return Err("disconnected".into());
         }
         let body: Value = serde_json::from_slice(&reply).map_err(|_| "invalid-response")?;
-        if body["v"] != 1 || body["id"] != id {
+        if body["v"] != version || body["id"] != id {
             return Err("correlation-failed".into());
         }
         Ok(body)
     }
 }
 pub struct Core {
+    floating: bool,
     pipe: Mutex<Option<Pipe>>,
     next: AtomicU64,
     cancel: watch::Sender<u64>,
@@ -104,6 +108,7 @@ pub struct Core {
 impl Default for Core {
     fn default() -> Self {
         Self {
+            floating: false,
             pipe: Mutex::new(None),
             next: AtomicU64::new(1),
             cancel: watch::channel(0).0,
@@ -112,6 +117,16 @@ impl Default for Core {
 }
 impl Core {
     pub async fn call(&self, req: Request) -> Result<Value, String> {
+        self.exchange(serde_json::to_value(req).map_err(|_| "invalid-request")?)
+            .await
+    }
+    pub fn floating() -> Self {
+        Self {
+            floating: true,
+            ..Self::default()
+        }
+    }
+    pub async fn exchange(&self, req: Value) -> Result<Value, String> {
         let mut stop = self.cancel.subscribe();
         let mut pipe = timeout(Duration::from_secs(2), self.pipe.lock())
             .await
@@ -120,10 +135,13 @@ impl Core {
             return Err("cancelled".into());
         }
         if pipe.is_none() {
-            *pipe = Some(Pipe::start()?);
+            *pipe = Some(Pipe::start(self.floating)?);
         }
         let id = self.next.fetch_add(1, Ordering::Relaxed);
-        let exchange = pipe.as_mut().unwrap().exchange(id, req);
+        let exchange = pipe
+            .as_mut()
+            .unwrap()
+            .exchange(id, req, if self.floating { 2 } else { 1 });
         let result = tokio::select! {
             _=stop.changed()=> Err("cancelled".to_string()),
             r=timeout(Duration::from_secs(5),exchange)=>r.unwrap_or_else(|_|Err("timeout".into()))
@@ -143,7 +161,14 @@ impl Core {
     }
     // Native-only acceptance exercise. React cannot request a process kill.
     pub async fn verify_disconnect(&self) -> Result<(), String> {
-        let before = self.call(Request::Load).await?;
+        let read = || async {
+            if self.floating {
+                self.exchange(json!({"op":"manifest"})).await
+            } else {
+                self.call(Request::Load).await
+            }
+        };
+        let before = read().await?;
         {
             let mut owner = self.pipe.lock().await;
             owner
@@ -154,10 +179,10 @@ impl Core {
                 .await
                 .map_err(|_| "kill-failed")?;
         }
-        if self.call(Request::Load).await.is_ok() {
+        if read().await.is_ok() {
             return Err("expected-disconnection".into());
         }
-        let after = self.call(Request::Load).await?;
+        let after = read().await?;
         if before != after {
             return Err("reconnect-data-mismatch".into());
         }
