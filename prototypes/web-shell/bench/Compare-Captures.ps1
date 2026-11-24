@@ -9,7 +9,7 @@ try {
     Start-Sleep -Seconds 2
     foreach($edition in 'anterior','conectado'){
         $exe=if($edition -eq 'anterior'){$BaselineExe}else{"$base/B/nexspace-tauri-lab.exe"}
-        $p=Start-Process $exe -ArgumentList '--exercise','--measure' -WorkingDirectory (Split-Path -Parent $exe) -PassThru
+        $p=Start-Process $exe -ArgumentList '--legacy','--exercise','--measure' -WorkingDirectory (Split-Path -Parent $exe) -PassThru
         try{
             $timer=[Diagnostics.Stopwatch]::StartNew()
             do{

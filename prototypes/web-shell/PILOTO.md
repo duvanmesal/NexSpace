@@ -1,5 +1,7 @@
 # Piloto Tauri con NexCore
 
+El documento describe la revisión histórica `695f70f`. El punto de entrada actual y la validación de la capa flotante están en [PARIDAD.md](PARIDAD.md). Para reproducir este piloto histórico se requiere `--legacy` y preparar su biblioteca con `NexSpace.CorePilot.exe --prepare`.
+
 La rama local `experiment/tauri-nexcore` parte del laboratorio A/B en `ed6789c`. Archivos y su popover leen una biblioteca SQLite v3. Juegos y Aplicaciones siguen mostrando las fichas del laboratorio. La aplicación WinUI de producción conserva sus servicios, sus ventanas y su recuperación.
 
 ## Ejecutar desde la raíz

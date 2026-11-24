@@ -31,7 +31,7 @@ $repetitions=if($Scenario -eq 'stress'){1}else{10}
 foreach($iteration in 1..$repetitions){
     $argsHost=if($Scenario -eq 'stress'){'--stress'}else{'--one'}
     $timer=[Diagnostics.Stopwatch]::StartNew()
-    $p=Start-Process $exe -ArgumentList $argsHost -WorkingDirectory "$base/B" -PassThru
+    $p=Start-Process $exe -ArgumentList '--legacy',$argsHost -WorkingDirectory "$base/B" -PassThru
     $seen=@{};$samples=@();$session=$null
     try {
         do {

@@ -1,5 +1,7 @@
 # Laboratorio NexSpace · Concepto C
 
+La capa flotante experimental conectada a SQLite v3 se compila, ejecuta y valida siguiendo [Paridad de NexContainers y NexDock](PARIDAD.md). Los ensayos A/B siguientes corresponden al laboratorio histórico.
+
 **Rama del piloto NexCore.** Para compilar y ejecutar esta revisión, sigue [PILOTO.md](PILOTO.md) y consulta [la validación](VALIDACION_PILOTO.md). Las instrucciones de comparación A/B que siguen corresponden a la rama histórica `codex/web-shell-lab`.
 
 

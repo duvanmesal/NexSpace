@@ -9,7 +9,7 @@ Add-Type -AssemblyName System.Windows.Forms,System.Drawing
 $exe=if($HostType -eq 'A'){"$base/../../artifacts/web-lab/A/NexSpace.WebLab.exe"}else{"$base/../../artifacts/$labDir/B/nexspace-tauri-lab.exe"}
 $timer=[Diagnostics.Stopwatch]::StartNew()
 $start=Get-Date
-$process=Start-Process -FilePath $exe -ArgumentList "--$Scene","--measure" -WorkingDirectory (Split-Path $exe) -PassThru
+$process=Start-Process -FilePath $exe -ArgumentList "--legacy","--$Scene","--measure" -WorkingDirectory (Split-Path $exe) -PassThru
 $session=$null
 $expected=@{one=1;three=3;exercise=4}[$Scene]
 $samples=@()
