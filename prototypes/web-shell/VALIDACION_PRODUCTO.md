@@ -2,6 +2,8 @@
 
 23 de noviembre de 2026 · Rama `experiment/tauri-nexcore` · Windows 11 x64
 
+El cierre posterior de persistencia, Narrador y reposo está en la [matriz para beta privada](ACEPTACION_BETA.md).
+
 ## Arrastre de Explorer
 
 La revisión `4454a4e` escuchaba `WebviewEvent::DragDrop`. En `tauri-runtime-wry` 2.12.5, un WebView creado dentro de `WebviewWindowBuilder` usa `WebviewKind::WindowContent`. El runtime convierte el arrastre de ese tipo en un `WindowEvent::DragDrop`. La suscripción anterior correspondía a WebViews secundarios. La corrección conecta el evento de ventana al flujo real de NexCore. [Código del runtime](https://docs.rs/crate/tauri-runtime-wry/2.12.5/source/src/lib.rs)

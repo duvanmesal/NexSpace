@@ -5,6 +5,24 @@ using System.Runtime.InteropServices;
 
 // Read type counts on x64 from processes in the launched lab tree. Never query object names.
 public static class Counters {
+    private delegate bool WindowVisitor(IntPtr window, IntPtr unused);
+    [DllImport("user32.dll")] private static extern bool EnumWindows(WindowVisitor visitor, IntPtr unused);
+    [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetWindowTextLength(IntPtr window);
+    [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr window, out uint pid);
+    public static long[] VisibleWindows(int pid) {
+        var windows = new List<long>();
+        EnumWindows((window, unused) => {
+            GetWindowThreadProcessId(window, out uint owner);
+            // Count named user-facing surfaces. Tao/WebView2 can also expose an untitled helper.
+            if (owner == pid && IsWindowVisible(window) && GetWindowTextLength(window) > 0)
+                windows.Add(window.ToInt64());
+            return true;
+        }, IntPtr.Zero);
+        windows.Sort();
+        return windows.ToArray();
+    }
     [DllImport("user32.dll")] public static extern int GetGuiResources(IntPtr process,int flags);
     [DllImport("ntdll.dll")] static extern int NtQueryInformationProcess(IntPtr process,int kind,IntPtr data,int bytes,out int used);
     [DllImport("ntdll.dll")] static extern int NtQueryObject(IntPtr h,int kind,IntPtr data,int bytes,out int used);

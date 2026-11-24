@@ -13,11 +13,14 @@ import tempfile
 base = Path(__file__).resolve().parents[3] / "artifacts/tauri-nexcore/B"
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--verify", type=Path)
+parser.add_argument("--native-trace", type=Path,
+                    help="Exigir evidencia OLE del mismo destino, además de verificar SQLite y originales.")
 parser.add_argument("--pilot", type=Path, default=base)
 parser.add_argument("--demo", action="store_true",
                     help="Preparar una escena visual aislada mediante IPC. No verifica el gesto físico.")
 args = parser.parse_args()
-base = args.pilot.resolve(strict=True)
+if args.native_trace and not args.verify:
+    parser.error("--native-trace requiere --verify")
 
 
 def snapshot(folder):
@@ -66,6 +69,7 @@ if args.verify:
     before = json.loads((root / "before.json").read_text(encoding="utf-8"))
     assert snapshot(folder) == before, "Cambió una ruta o hash del origen"
     with sqlite3.connect((root / "floating.db").as_uri() + "?mode=ro", uri=True) as db:
+        group_id, = db.execute("SELECT id FROM containers WHERE name='Archivos'").fetchone()
         targets = dict(db.execute("""SELECT i.target,i.kind FROM items i
             JOIN container_items ci ON ci.item_id=i.id JOIN containers c ON c.id=ci.container_id
             WHERE c.name='Archivos'"""))
@@ -75,8 +79,20 @@ if args.verify:
         if targets.get(str(path)) != expected_kind:
             wrong.append(path.name)
     assert not wrong, f"Faltan {len(wrong)} referencias correctas: {', '.join(wrong)}. Las rutas y hashes originales coinciden."
-    print("PASS · cuatro destinos en Archivos y árbol original intacto")
+    if args.native_trace:
+        events = [json.loads(line) for line in args.native_trace.read_text(encoding="utf-8").splitlines()]
+        events = [entry for entry in events if entry["detail"].get("window", "").endswith("_" + group_id)]
+        assert any(e["stage"] == "enter" and e["detail"]["accepted"] for e in events), "Sin entrada OLE en Archivos."
+        drops = [e for e in events if e["stage"] == "drop" and e["detail"]["accepted"]]
+        assert sum(event["detail"]["count"] for event in drops) == 4, "La traza OLE no registra exactamente los cuatro destinos."
+        assert not any(e["stage"] == "nexcore" and e["detail"].get("source") == "picker" for e in events), "El destino también recibió altas por selector."
+        assert sum(e["stage"] == "nexcore" and e["detail"].get("source") == "ole-drop" and e["detail"]["ok"] for e in events) == 4
+        assert len(drops) == sum(e["stage"] == "persisted" and "Ok" in e["detail"]["result"] for e in events)
+        print("PASS · evidencia OLE de cuatro referencias en Archivos y árbol original intacto")
+    else:
+        print("PASS · cuatro destinos en Archivos y árbol original intacto. Origen de las altas sin verificar.")
 else:
+    base = args.pilot.resolve(strict=True)
     root = Path(tempfile.mkdtemp(prefix="NexSpace-Phase4-drop-"))
     env = dict(os.environ, NEXSPACE_FLOATING_TEST_DIR=str(root), NEXSPACE_FLOATING_DROP_TRACE="1")
     subprocess.run([base / "core/NexSpace.CorePilot.exe", "--prepare-floating"], env=env, check=True)

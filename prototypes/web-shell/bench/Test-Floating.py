@@ -1,5 +1,7 @@
 """Run against an isolated SQLite snapshot, including a real Windows .lnk."""
 import argparse
+import ctypes
+from ctypes import wintypes
 import hashlib
 import json
 import os
@@ -9,11 +11,13 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import time
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--pilot", type=Path, default=Path(__file__).resolve().parents[3] / "artifacts/tauri-nexcore/B")
 parser.add_argument("--open-folder", action="store_true", help="Abrir la carpeta de prueba con su asociación de Windows.")
 parser.add_argument("--shell-icons", action="store_true")
+parser.add_argument("--host-restart", action="store_true", help="Reiniciar el host Tauri dos veces con la misma copia.")
 options = parser.parse_args()
 base = options.pilot.resolve(strict=True)
 home = Path(tempfile.mkdtemp(prefix="NexSpace-Phase4-contract-"))
@@ -50,6 +54,52 @@ def stop():
 def hash_tree(root):
     return {p.relative_to(root).as_posix():hashlib.sha256(p.read_bytes()).hexdigest()
             if p.is_file() else "folder" for p in root.rglob("*")}
+
+
+def verify_host(expected, excluded_title):
+    """Observe native windows of a real fresh launch using only its owned process ID."""
+    user = ctypes.WinDLL("user32", use_last_error=True)
+    visitor_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user.GetDpiForWindow.argtypes = [wintypes.HWND]
+    user.GetDpiForWindow.restype = wintypes.UINT
+    windows = {}
+    with subprocess.Popen([base / "nexspace-tauri-lab.exe"], cwd=base, env=env) as host:
+        @visitor_type
+        def visit(window, _):
+            owner = wintypes.DWORD()
+            user.GetWindowThreadProcessId(window, ctypes.byref(owner))
+            if owner.value == host.pid and user.IsWindowVisible(window):
+                title = ctypes.create_unicode_buffer(256)
+                user.GetWindowTextW(window, title, len(title))
+                window_rect = wintypes.RECT()
+                if user.GetWindowRect(window, ctypes.byref(window_rect)):
+                    windows[title.value] = (window_rect, user.GetDpiForWindow(window))
+            return True
+
+        try:
+            deadline = time.monotonic() + 20
+            while time.monotonic() < deadline and host.poll() is None:
+                windows.clear()
+                user.EnumWindows(visit, 0)
+                if expected["name"] in windows and "NexDock" in windows:
+                    panel, dpi = windows[expected["name"]]
+                    dock, _ = windows["NexDock"]
+                    # Wait for the startup dock to pick up its saved orientation and groups.
+                    if dock.bottom - dock.top > dock.right - dock.left:
+                        break
+                time.sleep(.1)
+            else:
+                raise AssertionError("No se restauraron el perfil y el dock vertical.")
+            assert excluded_title not in windows, "Apareció una ventana del perfil inactivo."
+            saved = expected["placement"]
+            assert (panel.left, panel.top, panel.right - panel.left) == (saved["x"], saved["y"], saved["width"])
+            assert abs((panel.bottom - panel.top) - round(52 * dpi / 96)) <= 1
+            print(f"PASS · PID {host.pid}: perfil esperado, dock vertical y geometría contraída restaurados.")
+        finally:
+            # Exercise recovery through an abrupt stop of this isolated child tree.
+            if host.poll() is None:
+                subprocess.run(["taskkill", "/PID", str(host.pid), "/T", "/F"], capture_output=True)
+                host.wait(timeout=10)
 
 files=home/"recursos"
 files.mkdir()
@@ -123,6 +173,23 @@ try:
     profile=blank
     assert not request("manifest")["groups"] and not request("manifest")["categories"]
     request("renameProfile",target=blank,name="Personal")
+    if options.host_restart:
+        request("switchProfile", target=duplicate)
+        profile = duplicate
+        expected = next(g for g in request("manifest")["groups"] if g["id"] == group)
+        before_restart = request("page", target=group)
+        stop()
+        for _ in range(2):
+            verify_host(expected, "Trabajo")
+        proc = launch()
+        assert request("manifest")["profile"] == duplicate
+        after_restart = request("page", target=group)
+        assert after_restart["rows"] == before_restart["rows"]
+        assert after_restart["art"] == before_restart["art"]
+        assert after_restart["list"]
+        with sqlite3.connect((home / "floating.db").as_uri() + "?mode=ro", uri=True) as db:
+            assert db.execute("PRAGMA quick_check").fetchone()[0] == "ok"
+        print("PASS · SQLite, referencias y PNG iguales después de dos arranques fríos del host Tauri.")
     request("switchProfile",target=manifest["profile"])
     profile=manifest["profile"]
     stop()

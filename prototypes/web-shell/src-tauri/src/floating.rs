@@ -309,7 +309,12 @@ async fn library(window: WebviewWindow, request: Action) -> Result<Value, String
     }
     Ok(result)
 }
-async fn add_paths(app: &AppHandle, label: &str, paths: Vec<PathBuf>) -> Result<(), String> {
+async fn add_paths(
+    app: &AppHandle,
+    label: &str,
+    paths: Vec<PathBuf>,
+    source: &str,
+) -> Result<(), String> {
     let (kind, p, id) = scope(label).ok_or("invalid-window")?;
     let mut failures = 0;
     let mut last = String::new();
@@ -322,7 +327,7 @@ async fn add_paths(app: &AppHandle, label: &str, paths: Vec<PathBuf>) -> Result<
         trace_drop(
             app,
             "nexcore",
-            json!({"window":label,"ok":result.is_ok(),"error":result.as_ref().err()}),
+            json!({"window":label,"source":source,"ok":result.is_ok(),"error":result.as_ref().err()}),
         );
         if let Err(e) = result {
             failures += 1;
@@ -396,7 +401,7 @@ fn native_drop(win: &tauri::Window, event: &DragDropEvent) {
         let label = label.to_owned();
         let paths = paths.clone();
         tauri::async_runtime::spawn(async move {
-            let result = add_paths(&app, &label, paths).await;
+            let result = add_paths(&app, &label, paths, "ole-drop").await;
             trace_drop(&app, "persisted", json!({"window":label,"result":result}));
             if let (Some(w), Err(e)) = (app.get_webview_window(&label), result) {
                 let _ = w.eval(format!(
@@ -427,7 +432,7 @@ async fn pick(window: WebviewWindow, folder: bool) -> Result<(), String> {
     .await
     .map_err(err)?;
     if let Some(paths) = paths {
-        add_paths(window.app_handle(), window.label(), paths).await?;
+        add_paths(window.app_handle(), window.label(), paths, "picker").await?;
     }
     Ok(())
 }
@@ -799,16 +804,25 @@ pub fn run() {
                 None::<&str>,
             )?;
             let menu = Menu::with_items(app, &[&restore, &quit])?;
+            let tooltip = if std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_some() {
+                "NexSpace · ensayo de aceptación"
+            } else {
+                "NexSpace experimental"
+            };
             let mut tray = TrayIconBuilder::new()
                 .menu(&menu)
-                .tooltip("NexSpace experimental");
+                .tooltip(tooltip);
             if let Some(icon) = app.default_window_icon() {
                 tray = tray.icon(icon.clone())
             }
             tray.on_menu_event(|a, e| {
                 if e.id().as_ref() == "restore" {
+                    trace_drop(a, "tray-recover", json!({
+                        "dockWasVisible": a.get_webview_window("dock").is_some_and(|dock| dock.is_visible().unwrap_or(false))
+                    }));
                     recover(a)
                 } else if e.id().as_ref() == "quit" {
+                    trace_drop(a, "tray-quit", json!({}));
                     a.exit(0)
                 }
             })
