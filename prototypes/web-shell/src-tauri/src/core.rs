@@ -161,28 +161,31 @@ impl Core {
     }
     // Native-only acceptance exercise. React cannot request a process kill.
     pub async fn verify_disconnect(&self) -> Result<(), String> {
-        let read = || async {
-            if self.floating {
-                self.exchange(json!({"op":"manifest"})).await
-            } else {
-                self.call(Request::Load).await
-            }
+        let request = if self.floating {
+            json!({"op":"manifest"})
+        } else {
+            serde_json::to_value(Request::Load).map_err(|_| "invalid-request")?
         };
-        let before = read().await?;
+        let version = if self.floating { 2 } else { 1 };
+        let before = self.exchange(request.clone()).await?;
         {
+            // Hold the channel across the fault probe. An automatic read from a
+            // window may otherwise detect EOF and reconnect ahead of this probe.
             let mut owner = self.pipe.lock().await;
-            owner
-                .as_mut()
-                .ok_or("missing-sidecar")?
-                .child
-                .kill()
-                .await
-                .map_err(|_| "kill-failed")?;
+            let pipe = owner.as_mut().ok_or("missing-sidecar")?;
+            pipe.child.kill().await.map_err(|_| "kill-failed")?;
+            let id = self.next.fetch_add(1, Ordering::Relaxed);
+            let result = timeout(
+                Duration::from_secs(5),
+                pipe.exchange(id, request.clone(), version),
+            )
+            .await;
+            owner.take();
+            if !matches!(result, Ok(Err(ref failure)) if failure == "disconnected") {
+                return Err("expected-disconnection".into());
+            }
         }
-        if read().await.is_ok() {
-            return Err("expected-disconnection".into());
-        }
-        let after = read().await?;
+        let after = self.exchange(request).await?;
         if before != after {
             return Err("reconnect-data-mismatch".into());
         }

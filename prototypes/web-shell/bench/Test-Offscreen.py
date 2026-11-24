@@ -12,14 +12,32 @@ import time
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("pilot", type=Path)
 parser.add_argument("--capture", action="store_true")
+parser.add_argument("--secondary", action="store_true")
 args = parser.parse_args()
 pilot = args.pilot.resolve(strict=True)
 bench = Path(__file__).resolve().parent
 root = Path(tempfile.mkdtemp(prefix="NexSpace-Phase4-offscreen-"))
 env = dict(os.environ, NEXSPACE_FLOATING_TEST_DIR=str(root))
 subprocess.run([pilot / "core/NexSpace.CorePilot.exe", "--prepare-floating"], env=env, check=True)
+secondary = None
+if args.secondary:
+    import json
+
+    result = subprocess.check_output(["pwsh", "-NoProfile", "-Command", """
+        Add-Type -AssemblyName System.Windows.Forms
+        $s=[Windows.Forms.Screen]::AllScreens | Where-Object {-not $_.Primary} | Select-Object -First 1
+        if(!$s){exit 1}
+        [ordered]@{key=$s.DeviceName;x=$s.WorkingArea.Left;y=$s.WorkingArea.Top;
+            right=$s.WorkingArea.Right;bottom=$s.WorkingArea.Bottom}|ConvertTo-Json -Compress
+    """], text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+    secondary = json.loads(result)
 with sqlite3.connect(root / "floating.db") as db:
-    assert db.execute("UPDATE containers SET x=-65000,y=-65000 WHERE name='Archivos'").rowcount == 1
+    if secondary:
+        update = db.execute("UPDATE containers SET monitor_key=?,x=?,y=? WHERE name='Archivos'",
+                            (secondary["key"], secondary["x"] + 50, secondary["y"] + 50))
+    else:
+        update = db.execute("UPDATE containers SET x=-65000,y=-65000 WHERE name='Archivos'")
+    assert update.rowcount == 1
 
 user = ctypes.WinDLL("user32", use_last_error=True)
 visit_type = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -48,7 +66,10 @@ try:
     rect = wintypes.RECT()
     assert user.GetWindowRect(windows["Archivos"], ctypes.byref(rect)), "Sin geometría"
     work = wintypes.RECT()
-    assert user.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0), "Sin área de trabajo"
+    if secondary:
+        work = wintypes.RECT(secondary["x"], secondary["y"], secondary["right"], secondary["bottom"])
+    else:
+        assert user.SystemParametersInfoW(0x0030, 0, ctypes.byref(work), 0), "Sin área de trabajo"
     assert work.left <= rect.left < rect.right <= work.right
     assert work.top <= rect.top < rect.bottom <= work.bottom
     print(f"PASS · Archivos restaurado dentro del área de trabajo: {rect.left},{rect.top}–{rect.right},{rect.bottom}")

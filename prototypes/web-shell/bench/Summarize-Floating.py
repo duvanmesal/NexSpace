@@ -1,8 +1,9 @@
 """Summarize the four private process-tree traces. CPU is a sampled lower bound."""
 import json
 from pathlib import Path
+import sys
 
-evidence = Path(__file__).resolve().parents[3] / "artifacts/tauri-nexcore/evidence/paridad"
+evidence = Path(sys.argv[1]) if len(sys.argv) == 2 else Path(__file__).resolve().parents[3] / "artifacts/tauri-nexcore/evidence/paridad"
 snapshots = set()
 for count in (100, 300):
     for engine in ("WinUI", "Tauri"):

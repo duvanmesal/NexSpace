@@ -21,6 +21,7 @@ type Row = {
   status: string;
 };
 type Page = {
+  multipleDisplays?: boolean;
   vertical: boolean;
   name: string;
   rows: Row[];
@@ -223,56 +224,35 @@ export function Floating() {
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [form, menu, entry]);
-  const drag = useRef<{
-    x: number;
-    y: number;
-    l: number;
-    t: number;
-    w: number;
-    h: number;
-    resize: boolean;
-  } | null>(null);
+  const drag = useRef<number | null>(null);
   const queue = useRef(Promise.resolve<unknown>(null));
+  const updating = useRef(false);
   function gesture(resize: boolean) {
+    function send(phase: string) {
+      queue.current = queue.current
+        .then(() => invoke("frame", { phase, resize, dx: 0, dy: 0 }))
+        .catch(fail);
+    }
     return {
       onPointerDown: (e: React.PointerEvent<HTMLElement>) => {
-        if (
-          role !== "group" ||
-          (!resize && page?.locked) ||
-          e.button !== 0 ||
-          (!resize && (e.target as Element).closest("button"))
-        )
-          return;
+        if (role !== "group" || !page || (!resize && page.locked) || e.button !== 0 ||
+            (!resize && (e.target as Element).closest("button"))) return;
         e.currentTarget.setPointerCapture(e.pointerId);
-        drag.current = {
-          x: e.screenX,
-          y: e.screenY,
-          l: screenX,
-          t: screenY,
-          w: innerWidth,
-          h: innerHeight,
-          resize,
-        };
+        drag.current = e.pointerId;
+        send("begin");
       },
-      onPointerMove: (e: React.PointerEvent<HTMLElement>) => update(e, false),
-      onPointerUp: (e: React.PointerEvent<HTMLElement>) => update(e, true),
-      onPointerCancel: (e: React.PointerEvent<HTMLElement>) => update(e, true),
+      onPointerMove: (e: React.PointerEvent<HTMLElement>) => {
+        if (drag.current !== e.pointerId || updating.current) return;
+        updating.current = true;
+        send("update");
+        void queue.current.finally(() => { updating.current = false; });
+      },
+      onLostPointerCapture: (e: React.PointerEvent<HTMLElement>) => {
+        if (drag.current !== e.pointerId) return;
+        drag.current = null;
+        send("end");
+      },
     };
-  }
-  function update(e: React.PointerEvent, save: boolean) {
-    const d = drag.current;
-    if (!d) return;
-    const dx = e.screenX - d.x,
-      dy = e.screenY - d.y;
-    const args = {
-      x: d.l + (d.resize ? 0 : dx),
-      y: d.t + (d.resize ? 0 : dy),
-      width: d.w + (d.resize ? dx : 0),
-      height: d.h + (d.resize ? dy : 0),
-      save,
-    };
-    if (save) drag.current = null;
-    queue.current = queue.current.then(() => invoke("frame", args)).catch(fail);
   }
   const picker = (folder: boolean) =>
     run(async () => {
@@ -352,6 +332,7 @@ export function Floating() {
           {data?.categories.map((c) => (
             <button
               key={c.id}
+              data-category={c.id}
               title={c.name}
               aria-label={c.name}
               aria-pressed={c.id === data.selected}
@@ -725,6 +706,12 @@ export function Floating() {
               <button onClick={() => picker(true)}>Añadir carpeta</button>
               {!popup && (
                 <>
+                  {page?.multipleDisplays && !page.locked && (
+                    <button onClick={() => run(async () => {
+                      await invoke("frame", { phase: "next-monitor", resize: false, dx: 0, dy: 0 });
+                      setMenu(false);
+                    })}>Mover a otra pantalla</button>
+                  )}
                   <button
                     onClick={() =>
                       run(() => act("listView", { flag: !page?.list }))
@@ -786,11 +773,10 @@ export function Floating() {
               e.preventDefault();
               run(() =>
                 invoke("frame", {
-                  x: screenX,
-                  y: screenY,
-                  width: innerWidth + d[e.key][0],
-                  height: innerHeight + d[e.key][1],
-                  save: true,
+                  phase: "key",
+                  resize: true,
+                  dx: d[e.key][0],
+                  dy: d[e.key][1],
                 }),
               );
             }

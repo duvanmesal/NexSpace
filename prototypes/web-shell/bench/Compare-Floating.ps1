@@ -1,8 +1,8 @@
-param([ValidateSet('WinUI','Tauri')][string]$Engine,[ValidateSet(100,300)][int]$Cycles, [string]$PilotDirectory)
+param([ValidateSet('WinUI','Tauri')][string]$Engine,[ValidateSet(100,300)][int]$Cycles, [string]$PilotDirectory, [ValidateRange(1,180)][int]$IdleSeconds=10, [string]$EvidenceDirectory)
 $ErrorActionPreference='Stop'
 $repo=[IO.Path]::GetFullPath("$PSScriptRoot/../../..")
 $base=if($PilotDirectory){(Resolve-Path -LiteralPath $PilotDirectory).Path}else{"$repo/artifacts/tauri-nexcore/B"}
-$evidence="$repo/artifacts/tauri-nexcore/evidence/paridad"
+$evidence=if($EvidenceDirectory){$EvidenceDirectory}else{"$repo/artifacts/tauri-nexcore/evidence/paridad"}
 New-Item -ItemType Directory -Force $evidence|Out-Null
 $data=(New-Item -ItemType Directory -Path (Join-Path $env:TEMP ("NexSpace-Phase4-parity-"+[guid]::NewGuid().ToString('N')+"/data")) -Force).FullName
 $db=if($Engine -eq 'WinUI'){'nexspace.db'}else{'floating.db'}
@@ -16,8 +16,8 @@ $info=[Diagnostics.ProcessStartInfo]::new($exe);$info.WorkingDirectory=Split-Pat
 if($Engine -eq 'WinUI'){
  $info.Environment['NEXSPACE_DIAGNOSTIC_PROBE']='1';$info.Environment['NEXSPACE_DATA_DIR']=$data
  $info.Environment['NEXSPACE_PROBE_HANDLE_TYPES']='1';$info.Environment['NEXSPACE_PROBE_COMPONENT']='container'
- $info.Environment['NEXSPACE_PROBE_CYCLES']="$Cycles";$info.Environment['NEXSPACE_PROBE_IDLE_SECONDS']='10'
-}else{$info.Environment['NEXSPACE_FLOATING_TEST_DIR']=$data;$info.ArgumentList.Add("--floating-cycles=$Cycles")}
+ $info.Environment['NEXSPACE_PROBE_CYCLES']="$Cycles";$info.Environment['NEXSPACE_PROBE_IDLE_SECONDS']="$IdleSeconds"
+}else{$info.Environment['NEXSPACE_FLOATING_TEST_DIR']=$data;$info.ArgumentList.Add("--floating-cycles=$Cycles");$info.ArgumentList.Add("--floating-idle=$IdleSeconds")}
 Add-Type -Path "$PSScriptRoot/Counters.cs"
 $timer=[Diagnostics.Stopwatch]::StartNew();$samples=@();$seen=@{};$stop=$null;$session=$null
 $p=[Diagnostics.Process]::Start($info)
@@ -48,5 +48,5 @@ $alive=@(foreach($id in $seen.Keys){$c=Get-Process -Id $id -ea SilentlyContinue;
 $result=$null;$done=0
 if($Engine -eq 'WinUI' -and (Test-Path "$data/probe-result.json")){$result=Get-Content "$data/probe-result.json" -Raw|ConvertFrom-Json;if($result.completed){$done=$result.iterations}else{$done=@($result.samples|Where-Object stage -match '^container-cycle-').Count}}
 if($Engine -eq 'Tauri' -and $session){$result=Get-Content "$session/cycles.result" -ea SilentlyContinue;$done=@(Get-Content "$session/cycles.tsv" -ea SilentlyContinue).Count}
-[ordered]@{engine=$Engine;requested=$Cycles;cycles=$done;exit=$p.ExitCode;stop=$stop;afterThree=$alive;snapshot=$hash;samples=$samples;result=$result}|ConvertTo-Json -Depth 10|Set-Content "$evidence/$Engine-$Cycles.json"
+[ordered]@{engine=$Engine;requested=$Cycles;idleSeconds=$IdleSeconds;cycles=$done;exit=$p.ExitCode;stop=$stop;afterThree=$alive;snapshot=$hash;samples=$samples;result=$result}|ConvertTo-Json -Depth 10|Set-Content "$evidence/$Engine-$Cycles.json"
 if($p.ExitCode -ne 0 -or $stop -or $done -ne $Cycles -or $alive.Count){throw "$Engine $done/$Cycles. Revisar JSON privado."}

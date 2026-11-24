@@ -1,5 +1,7 @@
 # NexContainers y NexDock sobre Tauri
 
+La iteración posterior documenta la corrección del arrastre, Shell, monitores y las mediciones con reposo prolongado en [Validación de producto](VALIDACION_PRODUCTO.md).
+
 Base histórica `695f70f`. Rama `experiment/tauri-nexcore`. Validación local en Windows 11 x64 el 23 de noviembre de 2026.
 
 ## Ejecutar

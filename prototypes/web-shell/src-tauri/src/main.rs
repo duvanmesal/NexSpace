@@ -2,6 +2,7 @@
 
 mod core;
 mod floating;
+mod placement;
 mod stress;
 mod validation;
 use core::{cancel_core, core_request, Core, Request};

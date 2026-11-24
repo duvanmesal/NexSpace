@@ -3,7 +3,9 @@ import argparse
 import hashlib
 import json
 import os
+import base64
 from pathlib import Path
+import shutil
 import sqlite3
 import subprocess
 import tempfile
@@ -11,6 +13,7 @@ import tempfile
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--pilot", type=Path, default=Path(__file__).resolve().parents[3] / "artifacts/tauri-nexcore/B")
 parser.add_argument("--open-folder", action="store_true", help="Abrir la carpeta de prueba con su asociación de Windows.")
+parser.add_argument("--shell-icons", action="store_true")
 options = parser.parse_args()
 base = options.pilot.resolve(strict=True)
 home = Path(tempfile.mkdtemp(prefix="NexSpace-Phase4-contract-"))
@@ -57,6 +60,10 @@ subprocess.run(["pwsh","-NoProfile","-Command",
     "$s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $pwd 'Acceso.lnk'));"
     "$s.TargetPath=(Join-Path $pwd 'Original.txt');$s.Save()"],cwd=files,check=True)
 before=hash_tree(files)
+if options.shell_icons:
+    # Read a Windows executable from an isolated copy. The test never launches it.
+    shutil.copyfile(Path(os.environ["WINDIR"]) / "System32" / "charmap.exe", files / "Mapa.exe")
+    before = hash_tree(files)
 try:
     manifest=request("manifest")
     profile=manifest["profile"]
@@ -65,9 +72,16 @@ try:
     for path in files.iterdir():
         request("add",target=group,path=str(path))
     request("add",target=group,path=str(files/"Original.txt"),error="duplicate-reference")
-    assert request("page",target=group)["total"]==4
+    assert request("page",target=group)["total"] == len(list(files.iterdir()))
     rows=request("page",target=group)["rows"]
-    assert {r["kind"] for r in rows}=={"Shortcut","File","Folder"}
+    assert {r["kind"] for r in rows} == {"Shortcut", "File", "Folder"} | ({"Application"} if options.shell_icons else set())
+    if options.shell_icons:
+        for pixels in (48, 64, 96):
+            page = request("page", target=group, iconPixels=pixels)
+            for row in page["rows"]:
+                icon = base64.b64decode(page["art"][row["key"]])
+                assert icon.startswith(b"\x89PNG\r\n\x1a\n"), (pixels, row["kind"])
+        print("PASS: PNG de Shell para carpeta, aplicación, acceso directo, TXT y PDF en tres tamaños solicitados.")
     if options.open_folder:
         folder = next(r for r in rows if r["kind"] == "Folder")
         request("open", target=group, item=folder["id"])

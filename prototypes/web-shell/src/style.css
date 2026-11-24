@@ -404,3 +404,20 @@ header h1 {
 header {
   touch-action: none;
 }
+
+.receiving-drop .panel,
+.receiving-drop .popup {
+  outline: 2px solid var(--accent);
+  outline-offset: -4px;
+}
+
+.panel header button,
+.popup header button {
+  width: 42px;
+  height: 40px;
+}
+
+.panel .grip {
+  min-width: 24px;
+  min-height: 24px;
+}

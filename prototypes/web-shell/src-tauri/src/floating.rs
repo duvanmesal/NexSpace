@@ -1,7 +1,12 @@
-use crate::{core::Core, err};
+use crate::{
+    core::Core,
+    err,
+    placement::{self, place, Rect},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
+    collections::HashMap,
     path::PathBuf,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -10,8 +15,7 @@ use std::{
     time::Duration,
 };
 use tauri::{
-    AppHandle, DragDropEvent, LogicalPosition, LogicalSize, Manager, WebviewEvent, WebviewUrl,
-    WebviewWindow, WebviewWindowBuilder,
+    AppHandle, DragDropEvent, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder, WindowEvent,
 };
 
 thread_local! {static HOTKEY:std::cell::RefCell<Option<global_hotkey::GlobalHotKeyManager>>=const{std::cell::RefCell::new(None)};}
@@ -23,6 +27,7 @@ struct Runtime {
     active: Mutex<Option<String>>,
     hotkey: Mutex<bool>,
     serial: AtomicU64,
+    gestures: Mutex<HashMap<String, Gesture>>,
 }
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -52,37 +57,40 @@ fn scope(label: &str) -> Option<(&str, &str, &str)> {
     let mut bits = label.split('_');
     Some((bits.next()?, bits.next()?, bits.next()?))
 }
-fn area(app: &AppHandle) -> Result<(f64, f64, f64, f64), String> {
-    let m = app
-        .primary_monitor()
-        .map_err(err)?
-        .ok_or("monitor-unavailable")?;
-    let a = m.work_area();
-    let s = m.scale_factor();
-    Ok((
-        a.position.x as f64 / s,
-        a.position.y as f64 / s,
-        a.size.width as f64 / s,
-        a.size.height as f64 / s,
-    ))
+#[derive(Clone, Copy)]
+struct Gesture {
+    start: Rect,
+    cursor: (f64, f64),
+    resize: bool,
+    scale: f64,
 }
-fn bounds(app: &AppHandle, x: f64, y: f64, w: f64, h: f64) -> Result<(f64, f64, f64, f64), String> {
-    let (l, t, aw, ah) = area(app)?;
-    let w = w.min(aw);
-    let h = h.min(ah);
-    Ok((x.clamp(l, l + aw - w), y.clamp(t, t + ah - h), w, h))
+
+fn centered(work: Rect, width: f64, height: f64) -> Rect {
+    Rect::new(
+        work.x + (work.width - width) / 2.,
+        work.y + (work.height - height) / 2.,
+        width,
+        height,
+    )
+    .fit(work)
 }
-fn place(w: &WebviewWindow, r: (f64, f64, f64, f64)) -> Result<(), String> {
-    w.set_size(LogicalSize::new(r.2, r.3)).map_err(err)?;
-    w.set_position(LogicalPosition::new(r.0, r.1)).map_err(err)
+
+fn saved_frame(group: &Value, work: Rect, scale: f64) -> Rect {
+    let p = &group["placement"];
+    Rect::new(
+        p["x"].as_f64().unwrap_or(work.x),
+        p["y"].as_f64().unwrap_or(work.y),
+        p["width"].as_f64().unwrap_or(386. * scale),
+        if group["isCollapsed"] == true {
+            52. * scale
+        } else {
+            p["height"].as_f64().unwrap_or(272. * scale)
+        },
+    )
 }
-fn window(
-    app: &AppHandle,
-    label: &str,
-    title: &str,
-    r: (f64, f64, f64, f64),
-) -> Result<WebviewWindow, String> {
-    WebviewWindowBuilder::new(
+
+fn window(app: &AppHandle, label: &str, title: &str, r: Rect) -> Result<WebviewWindow, String> {
+    let view = WebviewWindowBuilder::new(
         app,
         label,
         WebviewUrl::App(format!("index.html?floating={label}").into()),
@@ -92,8 +100,7 @@ fn window(
     .transparent(true)
     .shadow(false)
     .resizable(false)
-    .position(r.0, r.1)
-    .inner_size(r.2, r.3)
+    .visible(false)
     .background_color(tauri::window::Color(0, 0, 0, 0))
     .data_directory(app.state::<Runtime>().webview_data.clone())
     .on_navigation(|u| {
@@ -108,13 +115,18 @@ fn window(
             "label-closing".into()
         }
         other => err(other),
-    })
+    })?;
+    if let Err(error) = place(&view, r).and_then(|_| view.show().map_err(err)) {
+        let _ = view.destroy();
+        return Err(error);
+    }
+    Ok(view)
 }
 async fn create(
     app: &AppHandle,
     label: &str,
     title: &str,
-    r: (f64, f64, f64, f64),
+    r: Rect,
 ) -> Result<WebviewWindow, String> {
     for _ in 0..80 {
         match window(app, label, title, r) {
@@ -164,15 +176,28 @@ async fn sync(app: &AppHandle, recover: bool) -> Result<Value, String> {
             }
         }
     }
-    let (l, t, aw, ah) = area(app)?;
+    let dock_monitor = placement::named(app, data["dockMonitor"].as_str().unwrap_or_default())?;
+    let work = placement::area(&dock_monitor);
+    let scale = dock_monitor.scale_factor();
     let vertical = data["vertical"] == true;
-    let length = (100. + categories.len() as f64 * 60.)
-        .clamp(148., if vertical { ah.max(148.) } else { aw.max(148.) });
+    let length = (100. + categories.len() as f64 * 60.) * scale;
+    let thickness = 70. * scale;
     let dock = if vertical {
-        (l + 12., t + (ah - length) / 2., 70., length)
+        Rect::new(
+            work.x + 12. * scale,
+            work.y + (work.height - length) / 2.,
+            thickness,
+            length,
+        )
     } else {
-        (l + (aw - length) / 2., t + ah - 87., length, 70.)
-    };
+        Rect::new(
+            work.x + (work.width - length) / 2.,
+            work.y + work.height - 87. * scale,
+            length,
+            thickness,
+        )
+    }
+    .fit(work);
     if let Some(w) = app.get_webview_window("dock") {
         place(&w, dock)?;
         if recover {
@@ -184,23 +209,17 @@ async fn sync(app: &AppHandle, recover: bool) -> Result<Value, String> {
         let id = ident(&g["id"])?;
         let label = group_label(profile, id);
         let p = &g["placement"];
-        let h = if g["isCollapsed"] == true {
-            52.
-        } else {
-            p["height"].as_f64().unwrap_or(272.)
-        };
-        let rect = bounds(
-            app,
-            p["x"].as_f64().unwrap_or(l),
-            p["y"].as_f64().unwrap_or(t),
-            p["width"].as_f64().unwrap_or(386.),
-            h,
-        )?;
-        if recover && (p["x"].as_f64() != Some(rect.0) || p["y"].as_f64() != Some(rect.1)) {
+        let key = p["monitorKey"].as_str().unwrap_or_default();
+        let monitor = placement::named(app, key)?;
+        let work = placement::area(&monitor);
+        let saved = saved_frame(g, work, monitor.scale_factor());
+        let rect = saved.fit(work);
+        if recover && (saved.x != rect.x || saved.y != rect.y) {
             let mut corrected = p.clone();
-            corrected["x"] = json!(rect.0.round() as i32);
-            corrected["y"] = json!(rect.1.round() as i32);
-            corrected["monitorKey"] = json!("primary");
+            corrected["x"] = json!(rect.position().x);
+            corrected["y"] = json!(rect.position().y);
+            corrected["monitorKey"] =
+                json!(monitor.name().map(String::as_str).unwrap_or("primary"));
             ipc(app,json!({"op":"placement","profile":profile,"target":id,"placement":corrected,"flag":true})).await?;
         }
         if let Some(w) = app.get_webview_window(&label) {
@@ -261,7 +280,21 @@ async fn library(window: WebviewWindow, request: Action) -> Result<Value, String
     }
     let app = window.app_handle();
     let op = request.op.clone();
-    let result = ipc(app, serde_json::to_value(request).map_err(err)?).await?;
+    let mut message = serde_json::to_value(request).map_err(err)?;
+    if op == "page" {
+        let scale = window.scale_factor().unwrap_or(1.0);
+        message["iconPixels"] = json!(if scale > 1.5 {
+            96
+        } else if scale > 1.0 {
+            64
+        } else {
+            48
+        });
+    }
+    let mut result = ipc(app, message).await?;
+    if op == "page" && window.label().starts_with("group_") {
+        result["multipleDisplays"] = json!(app.available_monitors().is_ok_and(|m| m.len() > 1));
+    }
     if op == "manifest" {
         let mut v = result;
         v["selected"] = json!(*app.state::<Runtime>().active.lock().map_err(err)?);
@@ -281,12 +314,17 @@ async fn add_paths(app: &AppHandle, label: &str, paths: Vec<PathBuf>) -> Result<
     let mut failures = 0;
     let mut last = String::new();
     for path in paths {
-        if let Err(e) = ipc(
+        let result = ipc(
             app,
             json!({"op":"add","profile":p,"target":id,"category":kind=="category","path":path}),
         )
-        .await
-        {
+        .await;
+        trace_drop(
+            app,
+            "nexcore",
+            json!({"window":label,"ok":result.is_ok(),"error":result.as_ref().err()}),
+        );
+        if let Err(e) = result {
             failures += 1;
             last = e;
         }
@@ -298,6 +336,78 @@ async fn add_paths(app: &AppHandle, label: &str, paths: Vec<PathBuf>) -> Result<
         Ok(())
     }
 }
+fn trace_drop(app: &AppHandle, stage: &str, detail: Value) {
+    use std::io::Write;
+    if std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_none() {
+        return;
+    }
+    let root = &app.state::<Runtime>().root;
+    if let Ok(mut log) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(root.join("drop.jsonl"))
+    {
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        let _ = writeln!(
+            log,
+            "{}",
+            json!({"ms":stamp.as_millis(),"stage":stage,"detail":detail})
+        );
+    }
+}
+
+fn native_drop(win: &tauri::Window, event: &DragDropEvent) {
+    let app = win.app_handle();
+    let label = win.label();
+    let accepted = scope(label).is_some_and(|(kind, _, _)| matches!(kind, "group" | "category"));
+    let scale = win.scale_factor().unwrap_or(1.0);
+    if let DragDropEvent::Enter { paths, position } | DragDropEvent::Drop { paths, position } =
+        event
+    {
+        trace_drop(
+            app,
+            if matches!(event, DragDropEvent::Enter { .. }) {
+                "enter"
+            } else {
+                "drop"
+            },
+            json!({"window":label,"accepted":accepted,"count":paths.len(),"physical":[position.x,position.y],
+                "logical":[position.x/scale,position.y/scale],"scale":scale}),
+        );
+    }
+    if !accepted {
+        return;
+    }
+    let Some(view) = app.get_webview_window(label) else {
+        return;
+    };
+    let active = match event {
+        DragDropEvent::Enter { paths, .. } => !paths.is_empty(),
+        DragDropEvent::Leave | DragDropEvent::Drop { .. } => false,
+        _ => return,
+    };
+    let _ = view.eval(format!(
+        "document.documentElement.classList.toggle('receiving-drop',{active})"
+    ));
+    if let DragDropEvent::Drop { paths, .. } = event {
+        let app = app.clone();
+        let label = label.to_owned();
+        let paths = paths.clone();
+        tauri::async_runtime::spawn(async move {
+            let result = add_paths(&app, &label, paths).await;
+            trace_drop(&app, "persisted", json!({"window":label,"result":result}));
+            if let (Some(w), Err(e)) = (app.get_webview_window(&label), result) {
+                let _ = w.eval(format!(
+                    "window.dispatchEvent(new CustomEvent('drop-error',{{detail:{}}}))",
+                    json!(e)
+                ));
+            }
+        });
+    }
+}
+
 #[tauri::command]
 async fn pick(window: WebviewWindow, folder: bool) -> Result<(), String> {
     if scope(window.label()).is_none() {
@@ -324,34 +434,127 @@ async fn pick(window: WebviewWindow, folder: bool) -> Result<(), String> {
 #[tauri::command]
 async fn frame(
     window: WebviewWindow,
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-    save: bool,
+    phase: String,
+    resize: bool,
+    dx: f64,
+    dy: f64,
 ) -> Result<(), String> {
     let (kind, p, id) = scope(window.label()).ok_or("invalid-window")?;
     if kind != "group" {
         return Err("invalid-window".into());
     }
     let app = window.app_handle();
-    let rect = bounds(app, x, y, width.max(320.), height.max(52.))?;
-    if save {
-        let manifest = ipc(app, json!({"op":"manifest"})).await?;
-        let g = manifest["groups"]
-            .as_array()
-            .and_then(|groups| groups.iter().find(|g| g["id"] == id))
-            .ok_or("not-found")?;
-        let h = if g["isCollapsed"] == true {
-            g["placement"]["height"].clone()
-        } else {
-            json!(rect.3.round() as i32)
-        };
-        ipc(app,json!({"op":"placement","profile":p,"target":id,"placement":{"monitorKey":"primary","x":rect.0.round() as i32,"y":rect.1.round() as i32,"width":rect.2.round() as i32,"height":h}})).await?;
-        sync(app, false).await?;
-    } else {
-        place(&window, rect)?;
+    let state = app.state::<Runtime>();
+    let label = window.label().to_owned();
+    if phase == "begin" {
+        let start = placement::frame(&window)?;
+        let cursor = placement::cursor()?;
+        let scale = window.scale_factor().map_err(err)?;
+        state.gestures.lock().map_err(err)?.insert(
+            label,
+            Gesture {
+                start,
+                cursor,
+                resize,
+                scale,
+            },
+        );
+        return Ok(());
     }
+
+    let (desired, monitor) = if phase == "next-monitor" {
+        let current = window
+            .current_monitor()
+            .map_err(err)?
+            .unwrap_or(placement::primary(app)?);
+        let monitors = app.available_monitors().map_err(err)?;
+        let next = monitors
+            .iter()
+            .find(|m| m.name() != current.name())
+            .cloned()
+            .ok_or("second-monitor-unavailable")?;
+        let rect = placement::frame(&window)?;
+        let ratio = next.scale_factor() / current.scale_factor();
+        (
+            centered(
+                placement::area(&next),
+                rect.width * ratio,
+                rect.height * ratio,
+            ),
+            next,
+        )
+    } else if phase == "key" {
+        let scale = window.scale_factor().map_err(err)?;
+        let mut rect = placement::frame(&window)?;
+        rect.width += dx.clamp(-48., 48.) * scale;
+        rect.height += dy.clamp(-48., 48.) * scale;
+        let monitor = window
+            .current_monitor()
+            .map_err(err)?
+            .unwrap_or(placement::primary(app)?);
+        (rect, monitor)
+    } else {
+        let Some(gesture) = ({
+            let mut gestures = state.gestures.lock().map_err(err)?;
+            if phase == "end" {
+                gestures.remove(&label)
+            } else {
+                gestures.get(&label).copied()
+            }
+        }) else {
+            return Ok(());
+        };
+        let cursor = placement::cursor()?;
+        let mut rect = gesture.start;
+        let (x, y) = (cursor.0 - gesture.cursor.0, cursor.1 - gesture.cursor.1);
+        let monitor = if gesture.resize {
+            rect.width += x;
+            rect.height += y;
+            window.current_monitor().map_err(err)?
+        } else {
+            rect.x += x;
+            rect.y += y;
+            app.monitor_from_point(cursor.0, cursor.1).map_err(err)?
+        }
+        .unwrap_or(placement::primary(app)?);
+        if !gesture.resize {
+            let ratio = monitor.scale_factor() / gesture.scale;
+            // Keep the point held in the header under the physical cursor when DPI changes.
+            rect.x = cursor.0 - (gesture.cursor.0 - gesture.start.x) * ratio;
+            rect.y = cursor.1 - (gesture.cursor.1 - gesture.start.y) * ratio;
+            rect.width *= ratio;
+            rect.height *= ratio;
+        }
+        (rect, monitor)
+    };
+    let scale = monitor.scale_factor();
+    let mut rect = desired;
+    rect.width = rect.width.max(320. * scale);
+    rect.height = if resize {
+        rect.height.max(220. * scale)
+    } else {
+        rect.height
+    };
+    let rect = rect.fit(placement::area(&monitor));
+    if phase == "update" {
+        return place(&window, rect);
+    }
+
+    let data = ipc(app, json!({"op":"manifest"})).await?;
+    let g = data["groups"]
+        .as_array()
+        .and_then(|groups| groups.iter().find(|g| g["id"] == id))
+        .ok_or("not-found")?;
+    let expanded_height = if g["isCollapsed"] == true {
+        g["placement"]["height"].clone()
+    } else {
+        json!(rect.size().height)
+    };
+    ipc(app,json!({"op":"placement","profile":p,"target":id,"placement":{
+        "monitorKey":monitor.name().map(String::as_str).unwrap_or("primary"),
+        "x":rect.position().x,"y":rect.position().y,"width":rect.size().width,"height":expanded_height
+    }})).await?;
+    sync(app, false).await?;
     Ok(())
 }
 #[tauri::command]
@@ -369,12 +572,16 @@ async fn surface(
             if let Some(w) = app.get_webview_window("organize") {
                 w.set_focus().map_err(err)?;
             } else {
-                let (l, t, aw, ah) = area(app)?;
+                let monitor = window
+                    .current_monitor()
+                    .map_err(err)?
+                    .unwrap_or(placement::primary(app)?);
+                let scale = monitor.scale_factor();
                 create(
                     app,
                     "organize",
                     "Organizar NexSpace",
-                    bounds(app, l + (aw - 450.) / 2., t + (ah - 420.) / 2., 450., 420.)?,
+                    centered(placement::area(&monitor), 450. * scale, 420. * scale),
                 )
                 .await?;
             }
@@ -394,21 +601,29 @@ async fn surface(
             let selected = state.active.lock().map_err(err)?.as_deref() == Some(&id);
             dismiss(app)?;
             if !selected {
-                let pos = window
-                    .outer_position()
+                let pos = window.inner_position().map_err(err)?;
+                let monitor = window
+                    .current_monitor()
                     .map_err(err)?
-                    .to_logical::<f64>(window.scale_factor().map_err(err)?);
+                    .unwrap_or(placement::primary(app)?);
+                let scale = monitor.scale_factor();
                 let a = anchor.unwrap_or(36.);
                 let (x, y) = if data["vertical"] == true {
-                    (pos.x + 74., pos.y + a - 135.)
+                    (
+                        f64::from(pos.x) + 74. * scale,
+                        f64::from(pos.y) + (a - 135.) * scale,
+                    )
                 } else {
-                    (pos.x + a - 128., pos.y - 276.)
+                    (
+                        f64::from(pos.x) + (a - 128.) * scale,
+                        f64::from(pos.y) - 276. * scale,
+                    )
                 };
                 create(
                     app,
                     &format!("category_{p}_{id}"),
                     cat["name"].as_str().unwrap_or("Categoría"),
-                    bounds(app, x, y, 256., 272.)?,
+                    Rect::new(x, y, 256. * scale, 272. * scale).fit(placement::area(&monitor)),
                 )
                 .await?;
                 *state.active.lock().map_err(err)? = Some(id);
@@ -416,8 +631,17 @@ async fn surface(
             refresh(app);
         }
         "dismiss" if window.label().starts_with("category_") => {
+            let category = scope(window.label()).map(|(_, _, id)| id);
             dismiss(app)?;
             refresh(app);
+            if let (Some(dock), Some(id)) = (app.get_webview_window("dock"), category) {
+                let _ = dock.set_focus();
+                let selector = format!("[data-category='{id}']");
+                let _ = dock.eval(format!(
+                    "document.querySelector({})?.focus()",
+                    json!(selector)
+                ));
+            }
         }
         "dismiss" if window.label() == "organize" => window.destroy().map_err(err)?,
         "recover" => {
@@ -440,8 +664,21 @@ async fn surface(
 // Always surface the dock first, including when the IPC child is unavailable.
 fn recover(app: &AppHandle) {
     if let Some(w) = app.get_webview_window("dock") {
-        if let Ok((l, t, width, height)) = area(app) {
-            let _ = place(&w, (l + (width - 320.) / 2., t + height - 87., 320., 70.));
+        if let Ok(monitor) = placement::primary(app) {
+            let work = placement::area(&monitor);
+            let scale = monitor.scale_factor();
+            if !w.is_visible().unwrap_or(false) || w.current_monitor().ok().flatten().is_none() {
+                let _ = place(
+                    &w,
+                    Rect::new(
+                        work.x + work.width / 2. - 160. * scale,
+                        work.y + work.height - 87. * scale,
+                        320. * scale,
+                        70. * scale,
+                    )
+                    .fit(work),
+                );
+            }
         }
         let _ = w.unminimize();
         let _ = w.show();
@@ -455,11 +692,46 @@ fn recover(app: &AppHandle) {
         }
     });
 }
+async fn watch_displays(app: AppHandle) {
+    let mut previous = None;
+    loop {
+        if let Ok(monitors) = app.available_monitors() {
+            let mut layout: Vec<_> = monitors
+                .iter()
+                .map(|monitor| {
+                    (
+                        monitor.name().cloned(),
+                        placement::area(monitor),
+                        monitor.scale_factor(),
+                    )
+                })
+                .collect();
+            layout.sort_by(|left, right| left.0.cmp(&right.0));
+            if !layout.is_empty() && previous.as_ref().is_some_and(|last| last != &layout) {
+                let _ = dismiss(&app);
+                let _ = sync(&app, false).await;
+            }
+            if !layout.is_empty() {
+                previous = Some(layout);
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(3)).await;
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Core::floating())
         .invoke_handler(tauri::generate_handler![library, pick, frame, surface])
         .on_window_event(|win, event| {
+            if matches!(event, WindowEvent::Destroyed) {
+                if let Ok(mut work) = win.state::<Runtime>().gestures.lock() {
+                    work.remove(win.label());
+                }
+            }
+            if let WindowEvent::DragDrop(drop) = event {
+                native_drop(win, drop);
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let label = win.label().to_owned();
                 if label == "dock" {
@@ -483,26 +755,6 @@ pub fn run() {
                 }
             }
         })
-        .on_webview_event(|view, event| {
-            if let WebviewEvent::DragDrop(DragDropEvent::Drop { paths, .. }) = event {
-                let label = view.label().to_owned();
-                if scope(&label).is_none() {
-                    return;
-                }
-                let app = view.app_handle().clone();
-                let paths = paths.clone();
-                tauri::async_runtime::spawn(async move {
-                    if let Err(e) = add_paths(&app, &label, paths).await {
-                        if let Some(w) = app.get_webview_window(&label) {
-                            let _ = w.eval(format!(
-                                "window.dispatchEvent(new CustomEvent('drop-error',{{detail:{}}}))",
-                                json!(e)
-                            ));
-                        }
-                    }
-                });
-            }
-        })
         .setup(|app| {
             use global_hotkey::{
                 hotkey::{Code, HotKey, Modifiers},
@@ -520,8 +772,10 @@ pub fn run() {
                     .as_nanos()
             ));
             std::fs::create_dir(&root)?;
-            let diagnostic = std::env::args()
-                .any(|a| a.starts_with("--floating-cycles=") || a == "--verify-floating-ipc");
+            let diagnostic = std::env::args().any(|a| {
+                a.starts_with("--floating-cycles=")
+                    || matches!(a.as_str(), "--verify-floating-ipc" | "--floating-lifecycle")
+            });
             let webview_data = if diagnostic {
                 root.join("webview")
             } else {
@@ -575,7 +829,9 @@ pub fn run() {
                     *app.state::<Runtime>().hotkey.lock().unwrap() = true;
                 }
             }
-            let (l, t, aw, ah) = area(app.handle())?;
+            let monitor = placement::primary(app.handle())?;
+            let work = placement::area(&monitor);
+            let scale = monitor.scale_factor();
             if let Some(count) = std::env::args()
                 .find_map(|s| {
                     s.strip_prefix("--floating-cycles=")
@@ -587,7 +843,7 @@ pub fn run() {
                     app.handle(),
                     "organize",
                     "NexSpace · ensayo",
-                    (l + (aw - 450.) / 2., t + (ah - 420.) / 2., 450., 420.),
+                    centered(work, 450. * scale, 420. * scale),
                 )?;
                 let a = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -604,7 +860,13 @@ pub fn run() {
                 app.handle(),
                 "dock",
                 "NexDock",
-                (l + (aw - 320.) / 2., t + ah - 87., 320., 70.),
+                Rect::new(
+                    work.x + work.width / 2. - 160. * scale,
+                    work.y + work.height - 87. * scale,
+                    320. * scale,
+                    70. * scale,
+                )
+                .fit(work),
             )?;
             let a = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -620,6 +882,16 @@ pub fn run() {
                 if ipc(&a, json!({"op":"startup"})).await.is_ok() {
                     let _ = sync(&a, false).await;
                 }
+                if std::env::args().any(|s| s == "--floating-lifecycle") {
+                    let result = lifecycle(&a).await;
+                    let _ = std::fs::write(
+                        a.state::<Runtime>().root.join("lifecycle.result"),
+                        format!("{result:?}"),
+                    );
+                    a.exit(if result.is_ok() { 0 } else { 1 });
+                    return;
+                }
+                watch_displays(a).await;
             });
             Ok(())
         })
@@ -635,14 +907,12 @@ async fn cycles(app: &AppHandle, count: u32) -> Result<(), String> {
     let root = app.state::<Runtime>().root.clone();
     let mut log = std::fs::File::create(root.join("cycles.tsv")).map_err(err)?;
     let ready = root.join(format!("{label}.ready"));
-    let p = &g["placement"];
-    let rect = bounds(
+    let monitor = placement::named(
         app,
-        p["x"].as_f64().unwrap_or(24.),
-        p["y"].as_f64().unwrap_or(24.),
-        p["width"].as_f64().unwrap_or(386.),
-        p["height"].as_f64().unwrap_or(272.),
+        g["placement"]["monitorKey"].as_str().unwrap_or_default(),
     )?;
+    let work = placement::area(&monitor);
+    let rect = saved_frame(g, work, monitor.scale_factor()).fit(work);
     for i in 1..=count {
         let last = std::fs::read_to_string(&ready).ok();
         let w = create(app, &label, g["name"].as_str().unwrap_or("NexSpace"), rect).await?;
@@ -665,6 +935,64 @@ async fn cycles(app: &AppHandle, count: u32) -> Result<(), String> {
         writeln!(log, "group\t{i}").map_err(err)?;
     }
     std::fs::write(root.join("settling"), "1").map_err(err)?;
-    tokio::time::sleep(Duration::from_secs(10)).await;
+    let idle = std::env::args()
+        .find_map(|arg| arg.strip_prefix("--floating-idle=")?.parse::<u64>().ok())
+        .unwrap_or(10)
+        .clamp(1, 180);
+    tokio::time::sleep(Duration::from_secs(idle)).await;
+    Ok(())
+}
+
+async fn lifecycle(app: &AppHandle) -> Result<(), String> {
+    if std::env::var_os("NEXSPACE_FLOATING_TEST_DIR").is_none() {
+        return Err("isolated-library-required".into());
+    }
+    let initial = ipc(app, json!({"op":"manifest"})).await?;
+    let profile = ident(&initial["profile"])?;
+    let category = ident(&initial["categories"][0]["id"])?;
+    let alternate = ipc(
+        app,
+        json!({"op":"createProfile","profile":profile,"name":"Prueba de ciclo"}),
+    )
+    .await?;
+    let alternate = ident(&alternate)?;
+    let dock = app.get_webview_window("dock").ok_or("dock-missing")?;
+    for _ in 0..20 {
+        surface(
+            dock.clone(),
+            "category".into(),
+            Some(profile.into()),
+            Some(category.into()),
+            Some(118.),
+        )
+        .await?;
+        if app
+            .get_webview_window(&format!("category_{profile}_{category}"))
+            .is_none()
+        {
+            return Err("popover-missing".into());
+        }
+        ipc(
+            app,
+            json!({"op":"switchProfile","profile":profile,"target":alternate}),
+        )
+        .await?;
+        sync(app, false).await?;
+        if app.webview_windows().keys().any(|key| scope(key).is_some()) {
+            return Err("old-profile-window".into());
+        }
+        ipc(
+            app,
+            json!({"op":"switchProfile","profile":alternate,"target":profile}),
+        )
+        .await?;
+        sync(app, false).await?;
+    }
+    app.state::<Core>().verify_disconnect().await?;
+    dock.hide().map_err(err)?;
+    recover(app);
+    if !dock.is_visible().map_err(err)? {
+        return Err("dock-not-restored".into());
+    }
     Ok(())
 }

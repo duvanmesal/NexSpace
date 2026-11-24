@@ -1,4 +1,4 @@
-using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Data.Sqlite;
@@ -13,7 +13,7 @@ internal sealed class FloatingLibrary
     readonly WorkspaceService workspace;
     readonly ProfileService profiles;
     readonly WindowsContainerItemPlatformService shell = new();
-    readonly Dictionary<string, string?> icons = new(StringComparer.OrdinalIgnoreCase);
+    readonly ShellIcons icons = new();
     static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
     FloatingLibrary(string db)
@@ -52,7 +52,9 @@ internal sealed class FloatingLibrary
             return;
         }
         if (!File.Exists(db)) throw new IOException("Prepara primero la biblioteca de demostración.");
-        new FloatingLibrary(db).Serve();
+        int apartment = CoInitializeEx(0, 2);
+        try { new FloatingLibrary(db).Serve(); }
+        finally { if (apartment >= 0) CoUninitialize(); }
     }
 
     void Seed(string root)
@@ -112,6 +114,7 @@ internal sealed class FloatingLibrary
             vertical = w.Dock.Orientation == DockOrientation.Vertical || (w.Dock.Orientation == DockOrientation.Automatic && w.Dock.Edge is DockEdge.Left or DockEdge.Right),
             groups = containers.GetAll().Select(c => new { c.Id, c.Name, c.Placement, c.IsCollapsed, c.IsPositionLocked, shown = w.Session.OpenContainers.Contains(c.Id) && !hiddenAtStartup.Contains(c.Id) }),
             categories = w.Categories.Select(c => new { c.Id, c.Name, c.Glyph, c.ContainerId }),
+            dockMonitor = w.Dock.MonitorKey,
             w.Session.RestoreContainers
         };
     }
@@ -181,8 +184,8 @@ internal sealed class FloatingLibrary
                     var rows = entries.Select(i =>
                     {
                         var status = shell.Inspect(i);
-                        var key = i.Kind is ContainerItemKind.Application or ContainerItemKind.Shortcut ? i.Id.ToString() : i.Kind + Path.GetExtension(i.Target);
-                        if (status.Exists && !art.ContainsKey(key)) art[key] = IconFor(i, key);
+                        var (key, png) = status.Exists ? icons.Get(i, Math.Clamp(r.IconPixels ?? 48, 48, 96)) : ("", null);
+                        if (png is not null) art.TryAdd(key, png);
                         return new { i.Id, name = i.DisplayName, status = status.Code, kind = i.Kind.ToString(), key };
                     }).ToArray();
                     var dock = cat == null ? null : workspace.Load().Dock;
@@ -217,20 +220,8 @@ internal sealed class FloatingLibrary
         }
         return true;
     }
-    string? IconFor(ContainerItemReference item, string key)
-    {
-        if (icons.TryGetValue(key, out var cached)) return cached;
-        if (icons.Count >= 256) icons.Clear();
-        try
-        {
-            if (item.Kind is ContainerItemKind.Folder or ContainerItemKind.SystemResource) return null;
-            using var icon = Icon.ExtractAssociatedIcon(item.Target);
-            using var bmp = icon?.ToBitmap();
-            using var stream = new MemoryStream();
-            bmp?.Save(stream, ImageFormat.Png);
-            return icons[key] = stream.Length is > 0 and < 12000 ? Convert.ToBase64String(stream.ToArray()) : null;
-        }
-        catch { return null; }
-    }
-    sealed record Command(int V, long Id, string Op, Guid? Profile, Guid? Target, Guid? Item, bool Category, Guid? Link, string? Name, bool? Flag, int Offset, string? Path, ContainerPlacement? Placement);
+    [DllImport("ole32.dll")] private static extern int CoInitializeEx(nint reserved, uint mode);
+    [DllImport("ole32.dll")] private static extern void CoUninitialize();
+
+    sealed record Command(int V, long Id, string Op, Guid? Profile, Guid? Target, Guid? Item, bool Category, Guid? Link, string? Name, bool? Flag, int Offset, string? Path, ContainerPlacement? Placement, int? IconPixels);
 }

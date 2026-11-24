@@ -13,3 +13,7 @@ El punto de entrada ordinario restaura la biblioteca del piloto. La opción expl
 La separación permite cambiar de perfil, añadir una referencia o reordenar una categoría mediante los servicios del producto. Un popover enlazado consulta las referencias del mismo contenedor que muestra la cuadrícula. El proceso nativo posee las ventanas, la bandeja y el atajo para poder recuperar el dock cuando el contenido web pierde el foco.
 
 WebView2 añade procesos, memoria y handles. El protocolo necesita identificar respuestas, rechazar escrituras de perfiles antiguos y reconciliar las ventanas después de una mutación. Perder la respuesta de una escritura exige releer el estado antes de decidir si se repite. La evidencia de 100 y 300 ciclos y las condiciones pendientes están en la [matriz del piloto](../../prototypes/web-shell/PARIDAD.md).
+
+## Seguimiento de validación
+
+La rama experimental procesa el evento de arrastre nativo de la ventana, conserva geometría en píxeles físicos por dispositivo y solicita iconos a Shell a través del sidecar. Se mantiene SQLite v3 para las bibliotecas. El ajuste al área de trabajo del monitor es reversible mientras no se guarde una ubicación nueva. La [validación de producto](../../prototypes/web-shell/VALIDACION_PRODUCTO.md) documenta el bloqueo que corrigió este cambio y los ensayos pendientes para promover la interfaz.

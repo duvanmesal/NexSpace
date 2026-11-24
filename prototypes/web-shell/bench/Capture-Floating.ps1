@@ -1,10 +1,11 @@
 param([Parameter(Mandatory)][int]$PilotId,[Parameter(Mandatory)][long]$WindowId,
-    [Parameter(Mandatory)][ValidateSet('dock','popover','contenedor','organizar')][string]$Surface,
-    [switch]$WindowOnly)
+    [Parameter(Mandatory)][ValidatePattern('^[a-zA-Z0-9-]+$')][string]$Surface,
+    [switch]$WindowOnly,
+    [string]$EvidenceDirectory)
 $ErrorActionPreference='Stop'
 $base=[IO.Path]::GetFullPath("$PSScriptRoot/../../../artifacts/tauri-nexcore")
 $process=Get-Process -Id $PilotId
-$approvedPaths=@('B','paridad-final') | ForEach-Object {[IO.Path]::GetFullPath("$base/$_/nexspace-tauri-lab.exe")}
+$approvedPaths=@('B','paridad-final','validacion-producto') | ForEach-Object {[IO.Path]::GetFullPath("$base/$_/nexspace-tauri-lab.exe")}
 if($process.Path -notin $approvedPaths){throw 'La ventana debe pertenecer al piloto local.'}
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
@@ -39,7 +40,7 @@ if(!$WindowOnly){foreach($fx in .08,.5,.92){
         }
     }
 }}
-$dest=New-Item -ItemType Directory -Force "$base/evidence/paridad"
+$dest=New-Item -ItemType Directory -Force $(if($EvidenceDirectory){$EvidenceDirectory}else{"$base/evidence/paridad"})
 $bmp=[Drawing.Bitmap]::new($width,$height)
 $graphics=[Drawing.Graphics]::FromImage($bmp)
 try {
