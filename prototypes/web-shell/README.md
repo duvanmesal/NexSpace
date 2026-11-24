@@ -1,8 +1,8 @@
 # Laboratorio NexSpace · Concepto C
 
-La capa flotante experimental conectada a SQLite v3 se compila, ejecuta y valida siguiendo [Paridad de NexContainers y NexDock](PARIDAD.md). Los ensayos A/B siguientes corresponden al laboratorio histórico.
+La capa flotante experimental conectada a SQLite v3 se compila y ejecuta desde el directorio principal con [Build-Pilot y Run-Pilot](ENTORNO_TAURI.md). Los ensayos A/B siguientes corresponden al laboratorio histórico.
 
-**Rama del piloto NexCore.** Para compilar y ejecutar esta revisión, sigue [PILOTO.md](PILOTO.md) y consulta [la validación](VALIDACION_PILOTO.md). Las instrucciones de comparación A/B que siguen corresponden a la rama histórica `codex/web-shell-lab`.
+**Rama del piloto NexCore.** Consulta [la paridad funcional](PARIDAD.md) y [la matriz de aceptación](ACEPTACION_BETA.md). Las instrucciones de comparación A/B que siguen corresponden a la rama histórica `codex/web-shell-lab`.
 
 
 Dos anfitriones Windows x64 abren el mismo bundle de producción de React, TypeScript, Vite y Tailwind. Cada contenedor, el dock y el popover son ventanas independientes. El diseño está en `src/`, la entrada .NET en `host/` y la entrada Tauri en `src-tauri/`. [Contrato visual](../../assets/references/concepts/03_C_sistema_hibrido_APROBADO.png).

@@ -2,6 +2,8 @@
 
 24 de noviembre de 2026 · Windows 11 x64 26H2, compilación 26300.9974 · Base `c594359`
 
+La revisión posterior encontró un lote OLE de cuatro altas que usó la carpeta de otro ensayo. El detalle y el nuevo procedimiento con identidad única están en [Entorno Tauri](ENTORNO_TAURI.md). Esta matriz conserva el resultado registrado durante el cierre anterior.
+
 **Dictamen.** El piloto sirve para una evaluación interna supervisada con una biblioteca aislada. La aceptación de una beta privada de uso diario queda pendiente de verificar el arrastre de Explorer y la recuperación desde la bandeja física. Para incluir en la beta equipos con escalas distintas o monitores que se desconectan durante el uso, también debe completarse el recorrido de pantallas.
 
 ## Matriz de aceptación
@@ -30,6 +32,6 @@ Se midió el ejecutable `c594359` con tres contenedores y NexDock, el flujo ordi
 
 ## Repetir las comprobaciones
 
-- **Arrastre y bandeja.** Compilar con `Build-Pilot.ps1` y ejecutar `python bench/Explorer-Drop.py` desde `prototypes/web-shell`. Arrastrar los cuatro elementos de la carpeta abierta al contenedor Archivos. En `%TEMP%/NexSpace-Floating-PID-*/drop.jsonl`, la revisión actual distingue `source: ole-drop` y `source: picker`. Ejecutar `python bench/Explorer-Drop.py --verify DIRECTORIO_DEL_ENSAYO --native-trace RUTA_DE_DROP_JSONL`. Para la bandeja, enfocar NexDock, pulsar Alt+F4, abrir el menú del icono «NexSpace · ensayo de aceptación» y elegir «Recuperar ventanas». La opción «Cerrar NexSpace experimental» emite `tray-quit` cuando la invoca el menú.
+- **Arrastre y bandeja.** Preparar el ensayo con [Run-Pilot](ENTORNO_TAURI.md#arrastre-físico-reproducible). Para la bandeja, enfocar NexDock, pulsar Alt+F4, abrir el menú del icono «NexSpace · ensayo de aceptación» y elegir «Recuperar ventanas». La opción «Cerrar NexSpace experimental» emite `tray-quit` cuando la invoca el menú.
 - **Pantallas y persistencia.** Ejecutar `python bench/Test-Offscreen.py RUTA_DEL_PILOTO --secondary`, repetir con `--missing-monitor` y ejecutar `python bench/Test-Floating.py --pilot RUTA_DEL_PILOTO --shell-icons --host-restart`. Las pruebas crean copias aisladas.
 - **Reposo.** Ejecutar `./bench/Compare-Floating.ps1 -Engine Tauri -SoakMinutes 10 -PilotDirectory RUTA_DEL_PILOTO -EvidenceDirectory RUTA_PRIVADA`. Se ejecuta el modo flotante ordinario con tres contenedores y un dock. El ensayo exige los mismos procesos y cuatro ventanas con título, y espera a que el arranque se estabilice antes de medir. Al final el propio ensayo termina el árbol que lanzó. El cierre de producto se mide aparte. Los JSON privados de esta sesión están en `artifacts/tauri-nexcore/evidence/beta`.

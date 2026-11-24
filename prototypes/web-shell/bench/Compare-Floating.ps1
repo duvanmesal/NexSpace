@@ -4,14 +4,18 @@ $ErrorActionPreference='Stop'
 if($SoakMinutes -and ($Engine -ne 'Tauri' -or $Cycles)){throw 'El reposo usa Tauri sin ciclos.'}
 if(!$SoakMinutes -and !$Cycles){throw 'Indica los ciclos o el tiempo de reposo.'}
 $repo=[IO.Path]::GetFullPath("$PSScriptRoot/../../..")
-$base=if($PilotDirectory){(Resolve-Path -LiteralPath $PilotDirectory).Path}else{"$repo/artifacts/tauri-nexcore/B"}
+. "$PSScriptRoot/../Pilot-Tools.ps1"
+$python=Find-PilotPython ''
+$base=if($PilotDirectory){(Resolve-Path -LiteralPath $PilotDirectory).Path}else{
+    Invoke-PilotTool $python @('-X','utf8',"$PSScriptRoot/../pilot_support.py",'latest')
+}
 $evidence=if($EvidenceDirectory){$EvidenceDirectory}else{"$repo/artifacts/tauri-nexcore/evidence/paridad"}
 New-Item -ItemType Directory -Force $evidence|Out-Null
 $data=(New-Item -ItemType Directory -Path (Join-Path $env:TEMP ("NexSpace-Phase4-parity-"+[guid]::NewGuid().ToString('N')+"/data")) -Force).FullName
 $db=if($Engine -eq 'WinUI'){'nexspace.db'}else{'floating.db'}
 $original="$base/pilot-data/floating.db"
 # Abrir la biblioteca origen en modo de solo lectura y tomar una instantánea consistente.
-& python -c "import pathlib,sqlite3,sys; a=sqlite3.connect(pathlib.Path(sys.argv[1]).resolve().as_uri()+'?mode=ro',uri=True); b=sqlite3.connect(sys.argv[2]); a.backup(b); b.close();a.close()" $original "$data/$db"
+& $python -c "import pathlib,sqlite3,sys; a=sqlite3.connect(pathlib.Path(sys.argv[1]).resolve().as_uri()+'?mode=ro',uri=True); b=sqlite3.connect(sys.argv[2]); a.backup(b); b.close();a.close()" $original "$data/$db"
 if($LASTEXITCODE){throw 'SQLite backup'}
 $hash=(Get-FileHash "$data/$db").Hash
 $exe=if($Engine -eq 'WinUI'){(Get-ChildItem "$repo/src/NexSpace.UI/bin/x64/Release" -Filter NexSpace.UI.exe -Recurse | Select-Object -First 1).FullName}else{"$base/nexspace-tauri-lab.exe"}

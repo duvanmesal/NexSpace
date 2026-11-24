@@ -1,150 +1,114 @@
-"""Prepare a physical Explorer drop, then verify SQLite and hashes with --verify DIR."""
+"""Verify the isolated Explorer drop created by Run-Pilot.ps1 -DropTrial."""
+
 import argparse
-import ctypes
-from ctypes import wintypes
-import hashlib
+from collections import Counter
 import json
 import os
 from pathlib import Path
 import sqlite3
-import subprocess
-import tempfile
+import sys
 
-base = Path(__file__).resolve().parents[3] / "artifacts/tauri-nexcore/B"
-parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--verify", type=Path)
-parser.add_argument("--native-trace", type=Path,
-                    help="Exigir evidencia OLE del mismo destino, además de verificar SQLite y originales.")
-parser.add_argument("--pilot", type=Path, default=base)
-parser.add_argument("--demo", action="store_true",
-                    help="Preparar una escena visual aislada mediante IPC. No verifica el gesto físico.")
-args = parser.parse_args()
-if args.native_trace and not args.verify:
-    parser.error("--native-trace requiere --verify")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pilot_support import (STORAGE, launch, read_json, receipt_path, require,
+                           same_path, session_path, snapshot, write_json)
 
 
-def snapshot(folder):
-    return {
-        str(p.relative_to(folder)): hashlib.sha256(p.read_bytes()).hexdigest()
-        if p.is_file() else "directory"
-        for p in folder.rglob("*")
-    }
+def normalized(path):
+    return os.path.normcase(str(Path(path).resolve()))
 
 
-def integrity(pid):
-    """Read the integrity RID for the probe, without changing either process token."""
-    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
-    security = ctypes.WinDLL("advapi32", use_last_error=True)
-    kernel.OpenProcess.restype = wintypes.HANDLE
-    security.GetSidSubAuthorityCount.restype = ctypes.POINTER(ctypes.c_ubyte)
-    security.GetSidSubAuthority.restype = ctypes.POINTER(wintypes.DWORD)
-    handle = kernel.OpenProcess(0x1000, False, pid)
-    if not handle:
-        return "unavailable"
-    token = wintypes.HANDLE()
-    try:
-        if not security.OpenProcessToken(wintypes.HANDLE(handle), 8, ctypes.byref(token)):
-            return "unavailable"
-        needed = wintypes.DWORD()
-        security.GetTokenInformation(token, 25, None, 0, ctypes.byref(needed))
-        if not needed.value:
-            return "unavailable"
-        data = ctypes.create_string_buffer(needed.value)
-        if not security.GetTokenInformation(token, 25, data, needed, ctypes.byref(needed)):
-            return "unavailable"
-        sid = ctypes.cast(data, ctypes.POINTER(ctypes.c_void_p)).contents
-        count = security.GetSidSubAuthorityCount(sid).contents.value
-        return hex(security.GetSidSubAuthority(sid, count - 1).contents.value)
-    finally:
-        if token:
-            kernel.CloseHandle(token)
-        kernel.CloseHandle(wintypes.HANDLE(handle))
+def ole_evidence(events, expected, session, host_pid, window):
+    """Tie each accepted absolute path and committed reply to one native drop batch."""
+    bound = [event for event in events if (event["session"], event["hostPid"], event["detail"].get("window"))
+             == (session, host_pid, window)]
+    entered = False
+    drops, committed, accepted = {}, set(), {}
+    for event in bound:
+        stage, detail = event["stage"], event["detail"]
+        batch = detail.get("batch")
+        if stage == "enter" and detail["accepted"]:
+            entered = True
+        elif stage == "drop" and detail["accepted"] and entered and type(batch) is int:
+            drops[batch] = detail["count"]
+            entered = False
+        elif stage == "nexcore" and detail.get("source") == "ole-drop" and batch in drops:
+            if detail["ok"] and detail["validated"]:
+                accepted.setdefault(batch, []).append(normalized(detail["target"]))
+        elif stage == "persisted" and batch in drops and detail["result"] == {"Ok": None}:
+            committed.add(batch)
+    result = Counter(path for batch in committed if len(accepted.get(batch, [])) == drops[batch]
+                     for path in accepted[batch])
+    return any(event["stage"] == "drop" for event in bound), result == Counter(expected.keys())
 
 
-if args.verify:
-    root = args.verify.resolve(strict=True)
-    if root.parent != Path(tempfile.gettempdir()) or not root.name.startswith("NexSpace-Phase4-drop-"):
-        raise ValueError("Se requiere una biblioteca creada por este ensayo.")
+def verify(root):
+    identity = root.name.removeprefix("NexSpace-Phase4-pilot-")
+    if not (root / "drop-trial.json").is_file():
+        return {"status": "BLOCKED", "reason": "Ensayo sin identidad verificable. Abre uno con Run-Pilot.ps1 -DropTrial."}
+    require(same_path(root, session_path(identity)), "La ruta no corresponde a la sesión.")
+    trial = read_json(root / "drop-trial.json")
+    evidence = root / "evidence"
+    ready = read_json(evidence / "ready.json")
+    receipt = read_json(receipt_path(STORAGE, identity))
+    database = root / "floating.db"
+    require(trial["session"] == ready["session"] == receipt["id"] == identity
+            and ready["hostPid"] == receipt["process"][0]
+            and ready["build"] == receipt["build"]
+            and same_path(ready["executable"], receipt["executable"])
+            and same_path(ready["database"], database) and same_path(receipt["database"], database),
+            "Sesión, compilación o biblioteca incoherente.")
+    if not ready["tracing"]:
+        return {"status": "BLOCKED", "reason": "La instrumentación no está activa en el host."}
     folder = root / "Arrastrar a Archivos"
-    before = json.loads((root / "before.json").read_text(encoding="utf-8"))
-    assert snapshot(folder) == before, "Cambió una ruta o hash del origen"
-    with sqlite3.connect((root / "floating.db").as_uri() + "?mode=ro", uri=True) as db:
-        group_id, = db.execute("SELECT id FROM containers WHERE name='Archivos'").fetchone()
-        targets = dict(db.execute("""SELECT i.target,i.kind FROM items i
-            JOIN container_items ci ON ci.item_id=i.id JOIN containers c ON c.id=ci.container_id
-            WHERE c.name='Archivos'"""))
-    wrong = []
-    for path in folder.iterdir():
-        expected_kind = 1 if path.is_dir() else 2 if path.suffix == ".lnk" else 0
-        if targets.get(str(path)) != expected_kind:
-            wrong.append(path.name)
-    assert not wrong, f"Faltan {len(wrong)} referencias correctas: {', '.join(wrong)}. Las rutas y hashes originales coinciden."
-    if args.native_trace:
-        events = [json.loads(line) for line in args.native_trace.read_text(encoding="utf-8").splitlines()]
-        events = [entry for entry in events if entry["detail"].get("window", "").endswith("_" + group_id)]
-        assert any(e["stage"] == "enter" and e["detail"]["accepted"] for e in events), "Sin entrada OLE en Archivos."
-        drops = [e for e in events if e["stage"] == "drop" and e["detail"]["accepted"]]
-        assert sum(event["detail"]["count"] for event in drops) == 4, "La traza OLE no registra exactamente los cuatro destinos."
-        assert not any(e["stage"] == "nexcore" and e["detail"].get("source") == "picker" for e in events), "El destino también recibió altas por selector."
-        assert sum(e["stage"] == "nexcore" and e["detail"].get("source") == "ole-drop" and e["detail"]["ok"] for e in events) == 4
-        assert len(drops) == sum(e["stage"] == "persisted" and "Ok" in e["detail"]["result"] for e in events)
-        print("PASS · evidencia OLE de cuatro referencias en Archivos y árbol original intacto")
+    unchanged = snapshot(folder) == read_json(root / "before.json")
+    expected = {normalized(path): 1 if path.is_dir() else 2 if path.suffix.lower() == ".lnk" else 0
+                for path in folder.iterdir()}
+    if not unchanged or len(expected) != 4:
+        return {"status": "FAIL", "reason": "Alguna ruta o hash de origen cambió."}
+
+    with sqlite3.connect(database.as_uri() + "?mode=ro", uri=True) as db:
+        profile, = db.execute("SELECT active_id FROM profile_state WHERE id=1").fetchone()
+        require(profile == trial["profile"] == ready["profile"], "Activa el perfil original del ensayo.")
+        require(db.execute("SELECT id FROM containers WHERE id=? AND name='Archivos'",
+                           (trial["group"],)).fetchone() is not None, "Falta el contenedor Archivos del ensayo.")
+        targets = {normalized(path): kind for path, kind in db.execute("""
+            SELECT i.target,i.kind FROM items i JOIN container_items ci ON ci.item_id=i.id
+            WHERE ci.container_id=?""", (trial["group"],))}
+    count = sum(targets.get(path) == kind for path, kind in expected.items())
+    trace = evidence / "drop.jsonl"
+    events = [json.loads(line) for line in trace.read_text(encoding="utf-8").splitlines()] if trace.is_file() else []
+    label = f"group_{profile}_{trial['group']}"
+    seen, proven = ole_evidence(events, expected, identity, ready["hostPid"], label)
+    if count == 4 and proven:
+        status, reason = "PASS", "Cuatro altas OLE del mismo destino, cuatro referencias correctas y originales intactos."
+    elif not seen:
+        status, reason = "BLOCKED", "Sin drop OLE en Archivos de esta sesión. Las altas por selector o IPC no lo acreditan."
     else:
-        print("PASS · cuatro destinos en Archivos y árbol original intacto. Origen de las altas sin verificar.")
-else:
-    base = args.pilot.resolve(strict=True)
-    root = Path(tempfile.mkdtemp(prefix="NexSpace-Phase4-drop-"))
-    env = dict(os.environ, NEXSPACE_FLOATING_TEST_DIR=str(root), NEXSPACE_FLOATING_DROP_TRACE="1")
-    subprocess.run([base / "core/NexSpace.CorePilot.exe", "--prepare-floating"], env=env, check=True)
-    folder = root / "Arrastrar a Archivos"
-    folder.mkdir()
-    (folder / "Notas de prueba.txt").write_text("Documento aislado de NexSpace.", encoding="utf-8")
-    (folder / "Muestra.pdf").write_bytes(b"%PDF-1.4\n% isolated drop target\n%%EOF\n")
-    (folder / "Proyecto").mkdir()
-    (folder / "Proyecto/testigo.txt").write_text("Original", encoding="utf-8")
-    subprocess.run(["pwsh", "-NoProfile", "-Command",
-                    "$s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $pwd 'Acceso.lnk'));"
-                    "$s.TargetPath=(Join-Path $pwd 'Notas de prueba.txt');$s.Save()"], cwd=folder, check=True)
-    (root / "before.json").write_text(json.dumps(snapshot(folder)), encoding="utf-8")
-    if args.demo:
-        import shutil
+        status, reason = "FAIL", "El drop OLE no acredita las cuatro altas y referencias requeridas."
+    result = dict(status=status, reason=reason, references=count, originalsIntact=unchanged,
+                  session=identity, hostPid=ready["hostPid"], profile=profile, group=trial["group"])
+    write_json(evidence / "drop-verdict.json", result)
+    return result
 
-        application = folder / "Mapa de caracteres.exe"
-        shutil.copyfile(Path(os.environ["WINDIR"]) / "System32/charmap.exe", application)
-        with subprocess.Popen([base / "core/NexSpace.CorePilot.exe", "--floating"], env=env,
-                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True, encoding="utf-8") as core:
-            serial = 0
 
-            def request(op, **data):
-                global serial
-                serial += 1
-                core.stdin.write(json.dumps(dict(v=2, id=serial, op=op, **data)) + "\n")
-                core.stdin.flush()
-                reply = json.loads(core.stdout.readline())
-                assert reply["id"] == serial and not reply["error"], reply
-                return reply["data"]
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--verify", help="ID de sesión o directorio devuelto por el lanzador.")
+    parser.add_argument("--powershell", help="Ruta explícita a pwsh.exe o powershell.exe.")
+    args = parser.parse_args()
+    if args.verify:
+        trial = Path(args.verify)
+        root = trial.resolve() if trial.is_dir() else session_path(args.verify)
+        result = verify(root)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return {"PASS": 0, "FAIL": 1, "BLOCKED": 2}[result["status"]]
+    print(json.dumps(launch(STORAGE, drop=True, shell=args.powershell), ensure_ascii=False, indent=2))
+    return 0
 
-            collection = request("manifest")
-            groups = {g["name"]: g["id"] for g in collection["groups"]}
-            for group, name in [
-                ("Archivos", "Muestra.pdf"), ("Archivos", "Proyecto"), ("Archivos", "Notas de prueba.txt"),
-                ("Aplicaciones", application.name), ("Aplicaciones", "Acceso.lnk"),
-            ]:
-                request("add", profile=collection["profile"], target=groups[group], path=str(folder / name))
-            missing = root / "Referencia de ensayo.txt"
-            missing.touch()
-            request("add", profile=collection["profile"], target=groups["Juegos"], path=str(missing))
-            missing.unlink()
-            core.stdin.close()
-            assert core.wait(5) == 0
-    p = subprocess.Popen([base / "nexspace-tauri-lab.exe"], env=env, cwd=base,
-                         creationflags=subprocess.DETACHED_PROCESS, stdin=subprocess.DEVNULL,
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if not args.demo:
-        os.startfile(folder)
-    print(f"Biblioteca aislada: {root}\nPID del piloto: {p.pid}")
-    user = ctypes.WinDLL("user32", use_last_error=True)
-    user.GetShellWindow.restype = wintypes.HWND
-    shell_pid = wintypes.DWORD()
-    user.GetWindowThreadProcessId(wintypes.HWND(user.GetShellWindow()), ctypes.byref(shell_pid))
-    print(f"Integridad de Explorer (Shell): {integrity(shell_pid.value)} · piloto: {integrity(p.pid)}")
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (RuntimeError, OSError, ValueError, sqlite3.Error) as error:
+        print(f"FAIL: {error}", file=sys.stderr)
+        sys.exit(1)

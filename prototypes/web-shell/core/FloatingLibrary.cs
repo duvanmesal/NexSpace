@@ -9,6 +9,7 @@ using NexSpace.Windows;
 
 internal sealed class FloatingLibrary
 {
+    readonly string database;
     readonly ContainerService containers;
     readonly WorkspaceService workspace;
     readonly ProfileService profiles;
@@ -18,6 +19,7 @@ internal sealed class FloatingLibrary
 
     FloatingLibrary(string db)
     {
+        database = db;
         containers = new(new SqliteContainerRepository(db));
         Environment.SetEnvironmentVariable("NEXSPACE_DATA_DIR", Path.GetDirectoryName(db));
         workspace = new(new SqliteWorkspaceRepository(db), containers, new JsonEventLog());
@@ -84,22 +86,32 @@ internal sealed class FloatingLibrary
     static T Value<T>(ServiceResult<T> r) => r.Succeeded ? r.Value! : throw new Fault(r.Code);
     void Serve()
     {
+        var session = Environment.GetEnvironmentVariable("NEXSPACE_PILOT_SESSION_ID");
         while (Console.ReadLine() is { } line)
         {
             long id = 0; object? data = null; string? error = null;
+            Command? request = null;
             try
             {
                 if (line.Length > 32768) throw new Fault("message-too-large");
-                var r = JsonSerializer.Deserialize<Command>(line, Json) ?? throw new Fault("invalid-message");
-                id = r.Id;
-                if (r.V != 2 || id < 1) throw new Fault("invalid-envelope");
-                data = Execute(r);
+                request = JsonSerializer.Deserialize<Command>(line, Json) ?? throw new Fault("invalid-message");
+                id = request.Id;
+                if (request.V != 2 || id < 1) throw new Fault("invalid-envelope");
+                data = Execute(request);
             }
             catch (Fault ex) { error = ex.Message; }
             catch (JsonException) { error = "invalid-json"; }
             catch (ArgumentException) { error = "invalid-argument"; }
             catch (Exception) { error = "storage-or-platform-error"; }
             if (error != null) Console.Error.WriteLine($"{DateTimeOffset.UtcNow:O} {id} {error}");
+            if (session is not null && request is { Op: "add" })
+            {
+                var source = request.Source is "picker" or "ole-drop" ? request.Source : "test-ipc";
+                Console.Error.WriteLine(JsonSerializer.Serialize(new
+                {
+                    session, id, source, request.Profile, request.Target, ok = error is null, error
+                }, Json));
+            }
             Console.WriteLine(JsonSerializer.Serialize(new { v = 2, id, data, error }, Json));
         }
     }
@@ -134,6 +146,14 @@ internal sealed class FloatingLibrary
         var ps = profiles.Load();
         if (r.Op == "startup") { RestoreSession(true); return true; }
         if (r.Op == "manifest") return Manifest(ps);
+        if (r.Op == "diagnostics") return new
+        {
+            database,
+            profile = ps.ActiveId,
+            profileName = ps.Profiles.FirstOrDefault(p => p.Id == ps.ActiveId)?.Name,
+            corePid = Environment.ProcessId,
+            session = Environment.GetEnvironmentVariable("NEXSPACE_PILOT_SESSION_ID")
+        };
         if (r.Profile != ps.ActiveId) throw new Fault("stale-profile");
         var target = r.Target.GetValueOrDefault();
         var item = r.Item.GetValueOrDefault();
@@ -223,5 +243,5 @@ internal sealed class FloatingLibrary
     [DllImport("ole32.dll")] private static extern int CoInitializeEx(nint reserved, uint mode);
     [DllImport("ole32.dll")] private static extern void CoUninitialize();
 
-    sealed record Command(int V, long Id, string Op, Guid? Profile, Guid? Target, Guid? Item, bool Category, Guid? Link, string? Name, bool? Flag, int Offset, string? Path, ContainerPlacement? Placement, int? IconPixels);
+    sealed record Command(int V, long Id, string Op, Guid? Profile, Guid? Target, Guid? Item, bool Category, Guid? Link, string? Name, bool? Flag, int Offset, string? Path, ContainerPlacement? Placement, int? IconPixels, string? Source);
 }

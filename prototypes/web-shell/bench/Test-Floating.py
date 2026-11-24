@@ -10,16 +10,21 @@ from pathlib import Path
 import shutil
 import sqlite3
 import subprocess
+import sys
 import tempfile
 import time
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pilot_support import STORAGE, build_latest, powershell
+
 parser = argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--pilot", type=Path, default=Path(__file__).resolve().parents[3] / "artifacts/tauri-nexcore/B")
+parser.add_argument("--pilot", type=Path)
 parser.add_argument("--open-folder", action="store_true", help="Abrir la carpeta de prueba con su asociación de Windows.")
 parser.add_argument("--shell-icons", action="store_true")
 parser.add_argument("--host-restart", action="store_true", help="Reiniciar el host Tauri dos veces con la misma copia.")
 options = parser.parse_args()
-base = options.pilot.resolve(strict=True)
+base = options.pilot.resolve(strict=True) if options.pilot else build_latest(STORAGE)[0]
+shell = powershell()
 home = Path(tempfile.mkdtemp(prefix="NexSpace-Phase4-contract-"))
 env = dict(os.environ, NEXSPACE_FLOATING_TEST_DIR=str(home))
 source = sqlite3.connect((base/"pilot-data/floating.db").as_uri()+"?mode=ro",uri=True)
@@ -106,7 +111,7 @@ files.mkdir()
 (files/"Original.txt").write_text("NexSpace · prueba",encoding="utf-8")
 (files/"Documento.pdf").write_bytes(b"%PDF-1.4\n% NexSpace isolated reference test\n%%EOF\n")
 (files/"Carpeta").mkdir()
-subprocess.run(["pwsh","-NoProfile","-Command",
+subprocess.run([shell,"-NoProfile","-Command",
     "$s=(New-Object -ComObject WScript.Shell).CreateShortcut((Join-Path $pwd 'Acceso.lnk'));"
     "$s.TargetPath=(Join-Path $pwd 'Original.txt');$s.Save()"],cwd=files,check=True)
 before=hash_tree(files)
@@ -146,7 +151,7 @@ try:
         } while($timer.Elapsed.TotalSeconds -lt 10)
         exit 1
         """
-        subprocess.run(["pwsh", "-NoProfile", "-Command", verify], check=True,
+        subprocess.run([shell, "-NoProfile", "-Command", verify], check=True,
                        env=dict(env, NEXSPACE_EXPECTED_FOLDER=str(files/"Carpeta")))
         print("PASS: Explorer abrió el destino aislado solicitado por identificador.")
     request("rename",target=group,item=rows[0]["id"],name="Primera")

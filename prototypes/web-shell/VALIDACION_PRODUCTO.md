@@ -14,10 +14,10 @@ En superficies transparentes, suelta dentro de la tarjeta visible y comprueba el
 
 ### Reproducción física
 
-1. Compilar con `prototypes/web-shell/Build-Pilot.ps1` y ejecutar desde la raíz `python prototypes/web-shell/bench/Explorer-Drop.py`. El comando crea un TXT, un PDF, una carpeta y un acceso directo aislados. Abre Explorer y NexSpace con trazas activadas e informa las integridades de cada proceso. Para usar una compilación alternativa, pasar su carpeta con `--pilot`.
+1. Compilar y abrir la carpeta de ensayo con [Run-Pilot -DropTrial](ENTORNO_TAURI.md#arrastre-físico-reproducible). La sesión crea un TXT, un PDF, una carpeta y un acceso directo aislados.
 2. Colocar Explorer y Archivos uno al lado del otro. Seleccionar los cuatro elementos y arrastrarlos dentro de la tarjeta. Observar el contorno durante la entrada y las nuevas referencias al soltar.
 3. Ejecutar `python prototypes/web-shell/bench/Explorer-Drop.py --verify DIRECTORIO_DEL_ENSAYO`. Verifica en SQLite las cuatro rutas y tipos y compara rutas y SHA-256 de los originales. Repetir en un monitor secundario cuando corresponda.
-4. En `%TEMP%/NexSpace-Floating-PID-*/drop.jsonl`, buscar `enter`, `drop`, cuatro respuestas exitosas `nexcore` y `persisted`. La traza registra la etiqueta de destino, el recuento, las dos coordenadas y la escala. Omite los nombres y rutas personales. Si hay `enter` sin `drop`, comprobar si el puntero salió del destino antes de soltar. Si hay `drop` sin persistencia, consultar el código de NexCore.
+4. En `evidence/drop.jsonl` de la sesión buscar `enter`, `drop`, cuatro respuestas exitosas `nexcore` y `persisted`. El verificador localiza esta traza automáticamente. Si hay `enter` sin `drop`, comprobar si el puntero salió del destino antes de soltar. Si hay `drop` sin persistencia, consultar el código de NexCore.
 
 **Arrastre físico pendiente.** El control disponible usa coordenadas relativas a una sola ventana para los dos extremos de un gesto. Las pruebas por IPC no cuentan como evidencia de arrastre.
 
@@ -41,7 +41,7 @@ En superficies transparentes, suelta dentro de la tarjeta visible y comprueba el
 | Navegación, foco y nombres inspeccionados | PASS | Se comprobó la navegación con Tab, foco visible y nombres en UI Automation. El encabezado ofrece objetivos de 42 × 40 px CSS y el agarre de 24 × 24 px. Las categorías del dock tienen 54 × 52 px. Sobre una base blanca, el contraste calculado de texto y foco de la superficie base oscura es de 7,67:1 y 4,93:1. La estimación no cubre cada combinación de estados. |
 | Narrador | NOT_TESTED | Abrir Narrador en una sesión autorizada y recorrer encabezado, opciones, cuadrícula, popover y aviso de referencia ausente. Comprobar nombre, rol, estado y que Escape vuelve a la categoría. |
 | Bandeja de Windows | NOT_TESTED | El ensayo invoca el mismo recuperador nativo. La inspección del menú real del área de notificación queda pendiente. |
-| Capturas por ventana | PASS | Capturas privadas de grupos expandidos, Juegos contraído, los dos docks, popover y error. `Explorer-Drop.py --demo` reproduce la escena de datos por IPC. |
+| Capturas por ventana | PASS | Capturas privadas de grupos expandidos, Juegos contraído, los dos docks, popover y error. La escena original se preparó por IPC. |
 | Captura conjunta sobre fondo de demostración | BLOCKED | Se verificaron capturas directas de cada ventana. El fondo de ensayo no se pudo seleccionar con el control disponible. |
 
 ## Recursos

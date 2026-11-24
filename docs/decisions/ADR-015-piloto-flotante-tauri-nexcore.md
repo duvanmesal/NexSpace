@@ -17,3 +17,7 @@ WebView2 añade procesos, memoria y handles. El protocolo necesita identificar r
 ## Seguimiento de validación
 
 La rama experimental procesa el evento de arrastre nativo de la ventana, conserva geometría en píxeles físicos por dispositivo y solicita iconos a Shell a través del sidecar. Se mantiene SQLite v3 para las bibliotecas. El ajuste al área de trabajo del monitor es reversible mientras no se guarde una ubicación nueva. La [validación de producto](../../prototypes/web-shell/VALIDACION_PRODUCTO.md) documenta el bloqueo que corrigió este cambio y los ensayos pendientes para promover la interfaz.
+
+## Procedencia del piloto y aislamiento de ensayos
+
+El piloto se compila en Windows x64 con Node 24.22.0, Vite 7.3.8, Tauri 2.12.7, Rust/Cargo 1.100.0 GNU y .NET SDK 10.0.401 en el equipo ensayado. La salida versionada incluye una huella de entrada y hashes del ejecutable, cargador y sidecar. Cada arranque del lanzador asigna una base SQLite y una identidad de sesión independientes. El host acepta el cierre ordinario mediante un archivo local que solo actúa sobre el ID de la sesión. Las trazas de OLE se cotejan con esa identidad y con las filas reales en SQLite. [Guía del entorno](../../prototypes/web-shell/ENTORNO_TAURI.md)

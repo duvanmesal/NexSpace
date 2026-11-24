@@ -2,6 +2,7 @@
 
 mod core;
 mod floating;
+mod pilot_session;
 mod placement;
 mod stress;
 mod validation;

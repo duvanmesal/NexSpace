@@ -48,10 +48,14 @@ impl Pipe {
     fn start(floating: bool) -> Result<Self, String> {
         let base = std::env::current_exe().map_err(|_| "core-path")?;
         let dir = base.parent().ok_or("core-path")?;
+        let private_log = std::env::var_os("NEXSPACE_PILOT_SESSION_ID")
+            .and_then(|_| std::env::var_os("NEXSPACE_FLOATING_TEST_DIR"))
+            .map(|root| std::path::PathBuf::from(root).join("evidence/core.log"))
+            .unwrap_or_else(|| dir.join("pilot-data/core.log"));
         let log = std::fs::OpenOptions::new()
             .create(true)
             .append(true)
-            .open(dir.join("pilot-data/core.log"))
+            .open(private_log)
             .map_err(|_| "core-unprepared")?;
         let mut cmd = Command::new(dir.join("core/NexSpace.CorePilot.exe"));
         if floating {

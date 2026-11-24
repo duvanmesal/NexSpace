@@ -6,9 +6,7 @@ Base histórica `695f70f`. Rama `experiment/tauri-nexcore`. Validación local en
 
 ## Ejecutar
 
-Desde `prototypes/web-shell`, ejecutar `./Build-Pilot.ps1` con Node/npm, Rust/Cargo para Windows x64 y el SDK .NET 10 en PATH. El script acepta las rutas de Cargo y dotnet. Arrancar `artifacts/tauri-nexcore/B/nexspace-tauri-lab.exe` desde la raíz del proyecto. La primera preparación crea tres contenedores, recursos de demostración locales, tres categorías enlazadas y una sesión abierta en `pilot-data/floating.db`. Las siguientes ejecuciones conservan la biblioteca.
-
-Con una salida nueva, `-DemoDatabase` toma una instantánea SQLite de una biblioteca **de prueba** abierta en modo de solo lectura. Las referencias conservan sus destinos originales. Elegir el engranaje del dock para gestionar contenedores, categorías, orientación y perfiles. En un grupo se puede usar **Opciones** para añadir archivos o carpetas y **Mayús+F10** sobre una referencia para gestionar sus metadatos. El agarre inferior admite las flechas de teclado.
+Para compilar con detección de herramientas y abrir una sesión aislada, seguir [Build-Pilot y Run-Pilot](ENTORNO_TAURI.md). Elegir el engranaje del dock para gestionar contenedores, categorías, orientación y perfiles. En un grupo se puede usar **Opciones** para añadir archivos o carpetas y **Mayús+F10** sobre una referencia para gestionar sus metadatos. El agarre inferior admite las flechas de teclado.
 
 ## Contrato y propiedad de los datos
 
@@ -37,7 +35,7 @@ El IPC usa JSON por línea en UTF-8. Cada solicitud lleva versión 2, correlaci�
 | BLOCKED | Gesto físico desde Explorer. La herramienta interactiva limita ambos extremos del arrastre a una sola ventana. El ensayo deja un verificador independiente de la IU para comprobar el resultado del gesto manual. En la última lectura había cero de cuatro destinos de este gesto en SQLite y los hashes originales coincidían. El selector nativo de archivos y carpetas es la alternativa disponible. |
 | NOT_TESTED | Desconexión física de pantalla, DPI mixto, clic en el menú del área de notificación, lectura con Narrador y recorrido visual de todos los temas de WinUI. |
 
-Para verificar el gesto físico, ejecutar `python bench/Explorer-Drop.py`, arrastrar los cuatro elementos de la carpeta abierta al contenedor Archivos y ejecutar `python bench/Explorer-Drop.py --verify DIRECTORIO_DEL_ENSAYO`. La comprobación exige las cuatro rutas, el tipo de cada referencia y el mismo árbol de hashes que antes del gesto.
+El procedimiento actualizado verifica el gesto, las rutas, los tipos y los hashes con un mismo ID de sesión. [Verificar el arrastre físico](ENTORNO_TAURI.md#arrastre-físico-reproducible)
 
 ## Comparación con WinUI
 

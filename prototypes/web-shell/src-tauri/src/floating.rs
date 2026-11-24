@@ -1,6 +1,7 @@
 use crate::{
     core::Core,
     err,
+    pilot_session::PilotSession,
     placement::{self, place, Rect},
 };
 use serde::{Deserialize, Serialize};
@@ -28,6 +29,8 @@ struct Runtime {
     hotkey: Mutex<bool>,
     serial: AtomicU64,
     gestures: Mutex<HashMap<String, Gesture>>,
+    managed: Option<PilotSession>,
+    trace_lock: Mutex<()>,
 }
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -234,6 +237,10 @@ async fn sync(app: &AppHandle, recover: bool) -> Result<Value, String> {
             create(app, &label, g["name"].as_str().unwrap_or("NexSpace"), rect).await?;
         }
     }
+    if let Some(session) = &state.managed {
+        let diagnostics = ipc(app, json!({"op":"diagnostics"})).await?;
+        session.report(&diagnostics, &data["profile"], &data["groups"])?;
+    }
     refresh(app);
     Ok(data)
 }
@@ -314,20 +321,32 @@ async fn add_paths(
     label: &str,
     paths: Vec<PathBuf>,
     source: &str,
+    batch: Option<u64>,
 ) -> Result<(), String> {
     let (kind, p, id) = scope(label).ok_or("invalid-window")?;
     let mut failures = 0;
     let mut last = String::new();
     for path in paths {
-        let result = ipc(
-            app,
-            json!({"op":"add","profile":p,"target":id,"category":kind=="category","path":path}),
-        )
-        .await;
+        let validated = path.is_absolute() && path.to_str().is_some();
+        let result = if validated {
+            ipc(
+                app,
+                json!({"op":"add","profile":p,"target":id,"category":kind=="category","path":path,"source":source}),
+            )
+            .await
+        } else {
+            Err("invalid-target".into())
+        };
+        let target = app
+            .state::<Runtime>()
+            .managed
+            .is_some()
+            .then(|| path.to_string_lossy());
         trace_drop(
             app,
             "nexcore",
-            json!({"window":label,"source":source,"ok":result.is_ok(),"error":result.as_ref().err()}),
+            json!({"window":label,"source":source,"batch":batch,"target":target,
+                "validated":validated,"ok":result.is_ok(),"error":result.as_ref().err()}),
         );
         if let Err(e) = result {
             failures += 1;
@@ -346,7 +365,11 @@ fn trace_drop(app: &AppHandle, stage: &str, detail: Value) {
     if std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_none() {
         return;
     }
-    let root = &app.state::<Runtime>().root;
+    let runtime = app.state::<Runtime>();
+    let Ok(_lock) = runtime.trace_lock.lock() else {
+        return;
+    };
+    let root = &runtime.root;
     if let Ok(mut log) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -358,7 +381,8 @@ fn trace_drop(app: &AppHandle, stage: &str, detail: Value) {
         let _ = writeln!(
             log,
             "{}",
-            json!({"ms":stamp.as_millis(),"stage":stage,"detail":detail})
+            json!({"ms":stamp.as_millis(),"stage":stage,"detail":detail,
+                "session":runtime.managed.as_ref().map(|s| &s.id),"hostPid":std::process::id()})
         );
     }
 }
@@ -368,6 +392,12 @@ fn native_drop(win: &tauri::Window, event: &DragDropEvent) {
     let label = win.label();
     let accepted = scope(label).is_some_and(|(kind, _, _)| matches!(kind, "group" | "category"));
     let scale = win.scale_factor().unwrap_or(1.0);
+    let batch = matches!(event, DragDropEvent::Drop { .. }).then(|| {
+        app.state::<Runtime>()
+            .serial
+            .fetch_add(1, Ordering::Relaxed)
+            + 1
+    });
     if let DragDropEvent::Enter { paths, position } | DragDropEvent::Drop { paths, position } =
         event
     {
@@ -378,7 +408,7 @@ fn native_drop(win: &tauri::Window, event: &DragDropEvent) {
             } else {
                 "drop"
             },
-            json!({"window":label,"accepted":accepted,"count":paths.len(),"physical":[position.x,position.y],
+            json!({"window":label,"accepted":accepted,"batch":batch,"count":paths.len(),"physical":[position.x,position.y],
                 "logical":[position.x/scale,position.y/scale],"scale":scale}),
         );
     }
@@ -401,8 +431,12 @@ fn native_drop(win: &tauri::Window, event: &DragDropEvent) {
         let label = label.to_owned();
         let paths = paths.clone();
         tauri::async_runtime::spawn(async move {
-            let result = add_paths(&app, &label, paths, "ole-drop").await;
-            trace_drop(&app, "persisted", json!({"window":label,"result":result}));
+            let result = add_paths(&app, &label, paths, "ole-drop", batch).await;
+            trace_drop(
+                &app,
+                "persisted",
+                json!({"window":label,"batch":batch,"result":result}),
+            );
             if let (Some(w), Err(e)) = (app.get_webview_window(&label), result) {
                 let _ = w.eval(format!(
                     "window.dispatchEvent(new CustomEvent('drop-error',{{detail:{}}}))",
@@ -432,7 +466,7 @@ async fn pick(window: WebviewWindow, folder: bool) -> Result<(), String> {
     .await
     .map_err(err)?;
     if let Some(paths) = paths {
-        add_paths(window.app_handle(), window.label(), paths, "picker").await?;
+        add_paths(window.app_handle(), window.label(), paths, "picker", None).await?;
     }
     Ok(())
 }
@@ -700,6 +734,15 @@ fn recover(app: &AppHandle) {
 async fn watch_displays(app: AppHandle) {
     let mut previous = None;
     loop {
+        if app
+            .state::<Runtime>()
+            .managed
+            .as_ref()
+            .is_some_and(PilotSession::stop_requested)
+        {
+            app.exit(0);
+            return;
+        }
         if let Ok(monitors) = app.available_monitors() {
             let mut layout: Vec<_> = monitors
                 .iter()
@@ -769,19 +812,24 @@ pub fn run() {
                 menu::{Menu, MenuItem},
                 tray::TrayIconBuilder,
             };
-            let root = std::env::temp_dir().join(format!(
+            let managed = PilotSession::open()?;
+            let root = if let Some(session) = &managed {
+                session.evidence.clone()
+            } else {
+                std::env::temp_dir().join(format!(
                 "NexSpace-Floating-{}-{}",
                 std::process::id(),
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)?
                     .as_nanos()
-            ));
-            std::fs::create_dir(&root)?;
+                ))
+            };
+            std::fs::create_dir_all(&root)?;
             let diagnostic = std::env::args().any(|a| {
                 a.starts_with("--floating-cycles=")
                     || matches!(a.as_str(), "--verify-floating-ipc" | "--floating-lifecycle")
             });
-            let webview_data = if diagnostic {
+            let webview_data = if diagnostic || managed.is_some() {
                 root.join("webview")
             } else {
                 std::env::current_exe()?
@@ -792,6 +840,7 @@ pub fn run() {
             app.manage(Runtime {
                 webview_data,
                 root,
+                managed,
                 ..Default::default()
             });
             let restore =
@@ -893,8 +942,16 @@ pub fn run() {
                     a.exit(if result.is_ok() { 0 } else { 1 });
                     return;
                 }
-                if ipc(&a, json!({"op":"startup"})).await.is_ok() {
-                    let _ = sync(&a, false).await;
+                let started = async {
+                    ipc(&a, json!({"op":"startup"})).await?;
+                    sync(&a, false).await
+                }.await;
+                if let Err(error) = started {
+                    if let Some(session) = &a.state::<Runtime>().managed {
+                        let _ = std::fs::write(session.evidence.join("startup-error.txt"), error);
+                        a.exit(1);
+                        return;
+                    }
                 }
                 if std::env::args().any(|s| s == "--floating-lifecycle") {
                     let result = lifecycle(&a).await;
