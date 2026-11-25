@@ -9,6 +9,10 @@ pub struct PilotSession {
 }
 
 impl PilotSession {
+    pub fn tray_tracing() -> bool {
+        std::env::var_os("NEXSPACE_FLOATING_TRAY_TRACE").is_some()
+    }
+
     pub fn open() -> io::Result<Option<Self>> {
         let Ok(id) = std::env::var("NEXSPACE_PILOT_SESSION_ID") else {
             return Ok(None);
@@ -60,7 +64,8 @@ impl PilotSession {
             "profile": profile,
             "profileName": diagnostics["profileName"],
             "groups": groups,
-            "tracing": std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_some()
+            "tracing": std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_some(),
+            "trayTracing": Self::tray_tracing()
         });
         fs::write(&temporary, value.to_string()).map_err(err)?;
         fs::rename(&temporary, &ready).map_err(err)

@@ -35,6 +35,12 @@ La salida muestra el ID de sesión, el build y su hora UTC, la ruta del EXE, los
 
 La salida desde la bandeja sigue disponible. `-StopSession` valida la identidad del proceso, solicita su salida ordinaria y comprueba que el árbol observado terminó. Si el cierre se atasca, informa del fallo y conserva el proceso para diagnóstico.
 
+## Traza de recuperación desde la bandeja
+
+`Run-Pilot.ps1 -TrayTrial` activa `NEXSPACE_FLOATING_TRAY_TRACE` en el host aislado. El arranque registra `trayTracing: true` en `ready.json` y abre `evidence/tray.jsonl` con el estado inicial de NexDock. El cierre nativo del dock registra el estado antes y después de ocultarlo. El menú nativo de bandeja registra la solicitud y el resultado de recuperación con un mismo identificador de intento. La traza contiene el PID, build y sesión. El modo habitual de arranque no activa esa instrumentación.
+
+Para que la verificación y la evidencia queden en el historial, inicia el [ensayo de bandeja desde Test Center](../../tools/test-center/README.md#recuperación-desde-la-bandeja).
+
 ## Arrastre físico reproducible
 
 1. Ejecutar `Run-Pilot.ps1 -DropTrial`. Abrir la ruta exacta que indica `dropSource`. Su nombre **Arrastrar a Archivos [ID corto]** distingue esta sesión de las carpetas abiertas en ensayos anteriores. Contiene el TXT, el PDF, el acceso directo y la carpeta Proyecto. El mecanismo de accesos directos busca primero `pwsh.exe` y recurre a `powershell.exe`. Se puede fijar `-PowerShell powershell.exe`.

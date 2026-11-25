@@ -361,10 +361,13 @@ async fn add_paths(
     }
 }
 fn trace_drop(app: &AppHandle, stage: &str, detail: Value) {
-    use std::io::Write;
-    if std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_none() {
-        return;
+    if std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_some() {
+        write_trace(app, "drop.jsonl", stage, detail);
     }
+}
+
+fn write_trace(app: &AppHandle, filename: &str, stage: &str, detail: Value) {
+    use std::io::Write;
     let runtime = app.state::<Runtime>();
     let Ok(_lock) = runtime.trace_lock.lock() else {
         return;
@@ -373,7 +376,7 @@ fn trace_drop(app: &AppHandle, stage: &str, detail: Value) {
     if let Ok(mut log) = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
-        .open(root.join("drop.jsonl"))
+        .open(root.join(filename))
     {
         let stamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -382,7 +385,8 @@ fn trace_drop(app: &AppHandle, stage: &str, detail: Value) {
             log,
             "{}",
             json!({"ms":stamp.as_millis(),"stage":stage,"detail":detail,
-                "session":runtime.managed.as_ref().map(|s| &s.id),"hostPid":std::process::id()})
+                "session":runtime.managed.as_ref().map(|s| &s.id),"hostPid":std::process::id(),
+                "build":option_env!("NEXSPACE_BUILD_ID").unwrap_or("unversioned")})
         );
     }
 }
@@ -700,8 +704,13 @@ async fn surface(
     }
     Ok(())
 }
+fn dock_visibility(app: &AppHandle) -> Option<bool> {
+    app.get_webview_window("dock")?.is_visible().ok()
+}
+
 // Always surface the dock first, including when the IPC child is unavailable.
-fn recover(app: &AppHandle) {
+fn recover(app: &AppHandle, tray_attempt: Option<u64>) {
+    let mut show_succeeded = false;
     if let Some(w) = app.get_webview_window("dock") {
         if let Ok(monitor) = placement::primary(app) {
             let work = placement::area(&monitor);
@@ -720,8 +729,13 @@ fn recover(app: &AppHandle) {
             }
         }
         let _ = w.unminimize();
-        let _ = w.show();
+        show_succeeded = w.show().is_ok();
         let _ = w.set_focus();
+    }
+    if let Some(attempt) = tray_attempt {
+        write_trace(app, "tray.jsonl", "tray-recovered", json!({
+            "attempt": attempt, "showSucceeded": show_succeeded, "dockIsVisible": dock_visibility(app)
+        }));
     }
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -784,7 +798,15 @@ pub fn run() {
                 let label = win.label().to_owned();
                 if label == "dock" {
                     api.prevent_close();
-                    let _ = win.hide();
+                    let tracing = PilotSession::tray_tracing();
+                    let was_visible = tracing.then(|| win.is_visible().ok()).flatten();
+                    let hidden = win.hide();
+                    if tracing {
+                        write_trace(win.app_handle(), "tray.jsonl", "dock-hidden", json!({
+                            "dockWasVisible": was_visible, "hideSucceeded": hidden.is_ok(),
+                            "dockIsVisible": win.is_visible().ok()
+                        }));
+                    }
                 } else if let Some((kind, profile, id)) = scope(&label) {
                     api.prevent_close();
                     let a = win.app_handle().clone();
@@ -843,17 +865,19 @@ pub fn run() {
                 managed,
                 ..Default::default()
             });
+            const TRAY_RESTORE: &str = "nexspace-tray-restore";
+            const TRAY_QUIT: &str = "nexspace-tray-quit";
             let restore =
-                MenuItem::with_id(app, "restore", "Recuperar ventanas", true, None::<&str>)?;
+                MenuItem::with_id(app, TRAY_RESTORE, "Recuperar ventanas", true, None::<&str>)?;
             let quit = MenuItem::with_id(
                 app,
-                "quit",
+                TRAY_QUIT,
                 "Cerrar NexSpace experimental",
                 true,
                 None::<&str>,
             )?;
             let menu = Menu::with_items(app, &[&restore, &quit])?;
-            let tooltip = if std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_some() {
+            let tooltip = if PilotSession::tray_tracing() || std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_some() {
                 "NexSpace · ensayo de aceptación"
             } else {
                 "NexSpace experimental"
@@ -865,13 +889,21 @@ pub fn run() {
                 tray = tray.icon(icon.clone())
             }
             tray.on_menu_event(|a, e| {
-                if e.id().as_ref() == "restore" {
-                    trace_drop(a, "tray-recover", json!({
-                        "dockWasVisible": a.get_webview_window("dock").is_some_and(|dock| dock.is_visible().unwrap_or(false))
-                    }));
-                    recover(a)
-                } else if e.id().as_ref() == "quit" {
-                    trace_drop(a, "tray-quit", json!({}));
+                if e.id().as_ref() == TRAY_RESTORE {
+                    let attempt = PilotSession::tray_tracing().then(|| {
+                        let attempt = a.state::<Runtime>().serial.fetch_add(1, Ordering::Relaxed) + 1;
+                        write_trace(a, "tray.jsonl", "tray-recover", json!({
+                            "attempt": attempt, "dockWasVisible": dock_visibility(a)
+                        }));
+                        attempt
+                    });
+                    recover(a, attempt)
+                } else if e.id().as_ref() == TRAY_QUIT {
+                    if PilotSession::tray_tracing() {
+                        write_trace(a, "tray.jsonl", "tray-quit", json!({}));
+                    } else {
+                        trace_drop(a, "tray-quit", json!({}));
+                    }
                     a.exit(0)
                 }
             })
@@ -885,7 +917,7 @@ pub fn run() {
                     let a = app.handle().clone();
                     GlobalHotKeyEvent::set_event_handler(Some(move |e: GlobalHotKeyEvent| {
                         if e.id == hot.id() && e.state == HotKeyState::Pressed {
-                            recover(&a)
+                            recover(&a, None)
                         }
                     }));
                     HOTKEY.with(|slot| *slot.borrow_mut() = Some(m));
@@ -931,6 +963,10 @@ pub fn run() {
                 )
                 .fit(work),
             )?;
+            if PilotSession::tray_tracing() {
+                write_trace(app.handle(), "tray.jsonl", "tray-ready",
+                            json!({"dockIsVisible": dock_visibility(app.handle())}));
+            }
             let a = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 if std::env::args().any(|s| s == "--verify-floating-ipc") {
@@ -1061,7 +1097,7 @@ async fn lifecycle(app: &AppHandle) -> Result<(), String> {
     }
     app.state::<Core>().verify_disconnect().await?;
     dock.hide().map_err(err)?;
-    recover(app);
+    recover(app, None);
     if !dock.is_visible().map_err(err)? {
         return Err("dock-not-restored".into());
     }

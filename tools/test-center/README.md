@@ -11,7 +11,7 @@ Desde la raíz del repositorio, abre el menú en Windows PowerShell 5.1 o PowerS
 .\tools\NexSpace-Test.ps1 -Suite beta-readiness
 ```
 
-El menú muestra el ID, nombre, tipo, último estado y fecha de cada prueba. Un número ejecuta la prueba, **H** abre su historial, **V** revalida una sesión de arrastre y **S** sale. `-List` devuelve JSON para automatizaciones. `-TimeoutSeconds` sustituye el límite de catálogo por prueba, o por miembro cuando se usa en una suite.
+El menú muestra el ID, nombre, tipo, último estado y fecha de cada prueba. Un número ejecuta la prueba, **H** abre su historial, **V** revalida una sesión guiada y **S** sale. `-List` devuelve JSON para automatizaciones. `-TimeoutSeconds` sustituye el límite de catálogo por prueba, o por miembro cuando se usa en una suite.
 
 ## Arrastre físico
 
@@ -33,6 +33,20 @@ El primer ensayo físico aceptado se puede consultar incluso fuera del equipo or
 .\tools\NexSpace-Test.ps1 -Report -Session bcbf8d92f0094c6cb2dbc4c4be989051
 .\tools\NexSpace-Test.ps1 -Verify -Session bcbf8d92f0094c6cb2dbc4c4be989051
 ```
+
+## Recuperación desde la bandeja
+
+```powershell
+$ensayo = .\tools\NexSpace-Test.ps1 -Test windows-tray | ConvertFrom-Json
+$ensayo | Select-Object id, buildId, hostPid, sidecarPid, trayTrace
+$ensayo.details.instructions
+```
+
+1. Enfoca **NexDock** y pulsa **Alt+F4**. Comprueba que desaparece.
+2. Abre el menú del icono **NexSpace · ensayo de aceptación** en la bandeja de Windows y selecciona **Recuperar ventanas**. Comprueba que NexDock reaparece.
+3. Ejecuta `.\tools\NexSpace-Test.ps1 -Verify -Session $ensayo.id`. Si abriste otra terminal, usa el ID de la sesión en lugar de `$ensayo.id`. Puedes consultar `-Report -Test windows-tray` para localizarlo. No vuelvas a ejecutar `-Test` para verificar el mismo recorrido.
+
+El verificador exige una transición de visible a oculto, una solicitud nativa del menú mientras el dock sigue oculto y una confirmación de visibilidad tras esa misma solicitud. Vincula la traza al recibo del host, build y sesión. Hasta completar el recorrido, el resultado es **BLOCKED**. La prueba de recuperación y la prueba de cierre `windows-close` tienen criterios propios.
 
 ## Informes e historial
 

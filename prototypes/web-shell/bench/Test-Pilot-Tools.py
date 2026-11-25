@@ -12,6 +12,9 @@ import uuid
 spec = importlib.util.spec_from_file_location("drop_test_driver", Path(__file__).with_name("Explorer-Drop.py"))
 drop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(drop)
+tray_spec = importlib.util.spec_from_file_location("tray_test_driver", Path(__file__).with_name("Tray-Recovery.py"))
+tray = importlib.util.module_from_spec(tray_spec)
+tray_spec.loader.exec_module(tray)
 import pilot_support as pilot
 
 
@@ -129,6 +132,51 @@ class DropEvidenceTests(unittest.TestCase):
         lines = ["información de diagnóstico", *(json.dumps(record) for record in records)]
         self.assertEqual(drop.core_additions(lines, self.session, "expected", "files"),
                          {"ole-drop": 1, "picker": 1, "test-ipc": 1})
+
+
+class TraySequenceTests(unittest.TestCase):
+    """Check the sequence logic in memory, without producing physical evidence."""
+
+    def event(self, stage, **detail):
+        return dict(session="current", hostPid=42, build="build", stage=stage, detail=detail)
+
+    def setUp(self):
+        self.ready = self.event("tray-ready", dockIsVisible=True)
+        self.hidden = self.event("dock-hidden", dockWasVisible=True, hideSucceeded=True, dockIsVisible=False)
+        self.clicked = self.event("tray-recover", attempt=1, dockWasVisible=False)
+        self.visible = self.event("tray-recovered", attempt=1, showSucceeded=True, dockIsVisible=True)
+
+    def verify(self, *records):
+        return tray.check_sequence(records, "current", 42, "build")
+
+    def test_complete_sequence_returns_the_verified_records(self):
+        result = self.verify(self.ready, self.hidden, self.clicked, self.visible)
+        self.assertEqual(result[0], "PASS")
+        self.assertEqual(result[2], [self.hidden, self.clicked, self.visible])
+
+    def test_requires_hide_click_and_completion_of_the_same_attempt(self):
+        for records in ((self.clicked, self.visible), (self.hidden, self.visible), (self.hidden, self.clicked),
+                        (self.hidden, self.visible, self.clicked),
+                        (self.hidden, self.clicked, self.event("tray-recovered", attempt=2,
+                                                               showSucceeded=True, dockIsVisible=True)),
+                        (self.hidden, self.event("tray-recover", attempt=1, dockWasVisible=True), self.visible)):
+            with self.subTest(records=records):
+                self.assertEqual(self.verify(self.ready, *records)[0], "BLOCKED")
+
+    def test_rejects_other_processes_sessions_builds_and_legacy_quit(self):
+        for mismatched in ({"hostPid": 2968}, {"session": "older"}, {"build": "unrelated"}):
+            with self.subTest(mismatched=mismatched):
+                self.assertEqual(self.verify(self.ready, self.hidden, {**self.clicked, **mismatched},
+                                             self.visible)[0], "BLOCKED")
+        old_quit = {**self.event("tray-quit"), "hostPid": 2968, "session": "older"}
+        self.assertEqual(self.verify(old_quit, self.ready)[0], "BLOCKED")
+
+    def test_distinguishes_native_failure_from_missing_instrumentation(self):
+        false_hide = self.event("dock-hidden", dockWasVisible=True, hideSucceeded=False, dockIsVisible=True)
+        false_restore = self.event("tray-recovered", attempt=1, showSucceeded=True, dockIsVisible=False)
+        self.assertEqual(self.verify(self.ready, false_hide)[0], "FAIL")
+        self.assertEqual(self.verify(self.ready, self.hidden, self.clicked, false_restore)[0], "FAIL")
+        self.assertEqual(self.verify(self.hidden, self.clicked, self.visible)[0], "ERROR")
 
 
 if __name__ == "__main__":

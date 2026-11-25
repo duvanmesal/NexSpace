@@ -256,7 +256,9 @@ def launch_gate(storage):
             msvcrt.locking(file.fileno(), msvcrt.LK_UNLCK, 1)
 
 
-def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, open_explorer=True, *, identity=None):
+def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, open_explorer=True, *,
+           identity=None, tray=False):
+    require(not (tray and (drop or allow_parallel)), "El ensayo de bandeja requiere una instancia exclusiva.")
     shell = powershell(shell)
     with launch_gate(storage):
         build, manifest = build_latest(storage)
@@ -275,11 +277,14 @@ def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, ope
         evidence.mkdir(parents=True)
         env = dict(os.environ, NEXSPACE_FLOATING_TEST_DIR=str(root), NEXSPACE_PILOT_SESSION_ID=identity)
         env.pop("NEXSPACE_FLOATING_DROP_TRACE", None)
+        env.pop("NEXSPACE_FLOATING_TRAY_TRACE", None)
         if drop:
             env["NEXSPACE_FLOATING_DROP_TRACE"] = "1"
+        if tray:
+            env["NEXSPACE_FLOATING_TRAY_TRACE"] = "1"
         prepare = [build / "core" / CORE, "--prepare-floating"]
         if demo:
-            require(not drop, "El ensayo físico usa su propia biblioteca de demostración.")
+            require(not (drop or tray), "El ensayo físico usa su propia biblioteca de demostración.")
             prepare.append(demo.resolve(strict=True))
         subprocess.run(prepare, env=env, check=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
         folder = fixtures(root, shell, identity) if drop else None
@@ -299,6 +304,8 @@ def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, ope
         receipt = dict(id=identity, executable=str(build / HOST), build=manifest["id"],
                        commit=manifest["commit"], builtUtc=manifest["builtUtc"],
                        database=str(root / "floating.db"), evidence=str(evidence), process=pid_key(owner))
+        if tray:
+            receipt["trial"] = "windows-tray"
         index = receipt_path(storage, identity)
         index.parent.mkdir(parents=True, exist_ok=True)
         write_json(index, receipt)
@@ -315,6 +322,9 @@ def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, ope
                 and any(r["ProcessId"] == report["corePid"] and r["ParentProcessId"] == child.pid
                         and same_path(r["ExecutablePath"], build / "core" / CORE) for r in rows),
                 "La respuesta de NexCore no coincide con el host, la biblioteca y la compilación iniciados.")
+        if tray:
+            require(report.get("trayTracing") is True and (evidence / "tray.jsonl").is_file(),
+                    "El host no inició la traza nativa de bandeja.")
         if folder and open_explorer:
             os.startfile(folder)
         return {**receipt, **report, "dropTarget": target, "dropSource": str(folder) if folder else None}
@@ -371,7 +381,9 @@ def main():
     release.add_argument("storage", type=Path)
     run = commands.add_parser("run")
     run.add_argument("--demo", type=Path)
-    run.add_argument("--drop", action="store_true")
+    trial = run.add_mutually_exclusive_group()
+    trial.add_argument("--drop", action="store_true")
+    trial.add_argument("--tray", action="store_true")
     run.add_argument("--allow-parallel", action="store_true")
     run.add_argument("--no-explorer", action="store_true")
     run.add_argument("--powershell")
@@ -394,7 +406,7 @@ def main():
     else:
         if args.command == "run":
             result = launch(STORAGE, args.demo, args.drop, args.allow_parallel, args.powershell, not args.no_explorer,
-                            identity=args.id)
+                            identity=args.id, tray=args.tray)
         else:
             action = show_status if args.command == "status" else stop_session
             result = action(STORAGE, args.session, powershell(args.powershell))

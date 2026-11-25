@@ -2,6 +2,7 @@
 param(
     [Parameter(ParameterSetName='Start')][string]$DemoDatabase,
     [Parameter(ParameterSetName='Start')][switch]$DropTrial,
+    [Parameter(ParameterSetName='Start')][switch]$TrayTrial,
     [Parameter(ParameterSetName='Start')][switch]$AllowParallel,
     [Parameter(ParameterSetName='Start')][switch]$NoExplorer,
     [Parameter(ParameterSetName='Status',Mandatory)][switch]$Status,
@@ -18,6 +19,7 @@ switch ($PSCmdlet.ParameterSetName) {
         $parameters+='run'
         if($DemoDatabase){$parameters+=@('--demo',(Resolve-Path -LiteralPath $DemoDatabase).Path)}
         if($DropTrial){$parameters+='--drop'}
+        if($TrayTrial){$parameters+='--tray'}
         if($AllowParallel){$parameters+='--allow-parallel'}
         if($NoExplorer){$parameters+='--no-explorer'}
     }

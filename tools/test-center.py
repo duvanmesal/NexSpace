@@ -48,7 +48,8 @@ def run_command(argv, folder, phase, timeout):
     """Capture one script's output. A timeout cleans up only its own process tree."""
     stdout, stderr = folder / f"{phase}.stdout.log", folder / f"{phase}.stderr.log"
     env = os.environ.copy()
-    for name in ("NEXSPACE_PILOT_SESSION_ID", "NEXSPACE_FLOATING_TEST_DIR", "NEXSPACE_FLOATING_DROP_TRACE"):
+    for name in ("NEXSPACE_PILOT_SESSION_ID", "NEXSPACE_FLOATING_TEST_DIR", "NEXSPACE_FLOATING_DROP_TRACE",
+                 "NEXSPACE_FLOATING_TRAY_TRACE"):
         env.pop(name, None)
     with stdout.open("wb") as out, stderr.open("wb") as err:
         with subprocess.Popen(argv, cwd=REPO, env=env, stdin=subprocess.DEVNULL, stdout=out, stderr=err) as child:
@@ -130,6 +131,8 @@ class Center:
                     startedUtc=(datetime(1601, 1, 1, tzinfo=UTC) +
                                 timedelta(microseconds=int(receipt["process"][1]) // 10)).isoformat(),
                     pilotEvidence=str(root / "evidence"), pilotReceipt=str(receipt_file))
+        if receipt.get("trial") == "windows-tray":
+            data["trayTrace"] = str(root / "evidence/tray.jsonl")
         manifest = Path(receipt["executable"]).parent / "build.json"
         if manifest.is_file():
             build = pilot.read_json(manifest)
@@ -222,8 +225,9 @@ class Center:
                         session.update(self.managed(identity))
                         pilot.write_json(folder / "session.json", session)
                 if test["humanRequired"]:
-                    os.startfile(session["sourceFolder"])
-                    return result("BLOCKED", "El ensayo está abierto y espera el gesto físico.",
+                    if session["sourceFolder"]:
+                        os.startfile(session["sourceFolder"])
+                    return result("BLOCKED", "El ensayo está abierto y espera la comprobación física.",
                                   details={"instructions": test["humanInstructions"]})
             if test_id == "build-release":
                 path, manifest = pilot.build_latest(self.pilot_storage)
@@ -233,16 +237,18 @@ class Center:
         except (RuntimeError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
             return result("ERROR", str(error))
 
-    def archive_drop(self, folder, session):
+    def archive_evidence(self, folder, session):
         """Preserve small original receipts and trace files outside the temporary library."""
         evidence = Path(session["pilotEvidence"])
         root = evidence.parent
         archived = folder / "original"
         archived.mkdir(exist_ok=True)
-        for path in (Path(session["pilotReceipt"]), root / "before.json", root / "drop-trial.json",
-                     evidence / "ready.json", evidence / "core.log", evidence / "drop.jsonl",
-                     evidence / "drop-verdict.json"):
-            target = archived / ("pilot-receipt.json" if path == Path(session["pilotReceipt"]) else path.name)
+        receipt = Path(session["pilotReceipt"])
+        files = (evidence / "tray.jsonl",) if session["testId"] == "windows-tray" else (
+            root / "before.json", root / "drop-trial.json", evidence / "core.log",
+            evidence / "drop.jsonl", evidence / "drop-verdict.json")
+        for path in (receipt, evidence / "ready.json", *files):
+            target = archived / ("pilot-receipt.json" if path == receipt else path.name)
             if path.is_file() and not target.exists():
                 shutil.copy2(path, target)
 
@@ -253,22 +259,28 @@ class Center:
         root = pilot.session_path(identity)
         known = self.accepted(identity)
         existing = pilot.read_json(descriptor) if descriptor.is_file() else None
-        if existing and existing["testId"] != "explorer-drop":
+        test_id = existing["testId"] if existing else "explorer-drop"
+        if not existing and receipt.is_file() and pilot.read_json(receipt).get("trial") == "windows-tray":
+            test_id = "windows-tray"
+        if test_id not in ("explorer-drop", "windows-tray"):
             raise ValueError("La sesión no admite verificación diferida.")
         if not existing:
             if not receipt.is_file() or (known and not (root / "floating.db").is_file()):
                 return self.historical(identity, requested=True)
         if not existing:
-            folder, existing = self.session(identity, test="explorer-drop", source=False)
-        test = self.tests["explorer-drop"]
+            folder, existing = self.session(identity, test=test_id, source=False)
+        test = self.tests[test_id]
         with pilot.launch_gate(folder):
             previous = self.record(folder)
-            required = (receipt, *(root / name for name in ("floating.db", "drop-trial.json", "before.json",
-                                                             "evidence/ready.json")))
+            required = (receipt, root / "floating.db", root / "evidence/ready.json")
             missing_source = False
-            if previous.get("status") == "PASS" or known:
-                required += (root / "evidence/drop.jsonl", root / "evidence/core.log")
-                missing_source = bool(existing.get("sourceFolder")) and not Path(existing["sourceFolder"]).is_dir()
+            if test_id == "explorer-drop":
+                required += (root / "drop-trial.json", root / "before.json")
+                if previous.get("status") == "PASS" or known:
+                    required += (root / "evidence/drop.jsonl", root / "evidence/core.log")
+                    missing_source = bool(existing.get("sourceFolder")) and not Path(existing["sourceFolder"]).is_dir()
+            else:
+                required += (root / "evidence/tray.jsonl",)
             if missing_source or any(not file.is_file() for file in required):
                 if previous.get("status") == "PASS":
                     return {**previous, "status": "BLOCKED", "historicalStatus": "PASS",
@@ -283,7 +295,8 @@ class Center:
                     if existing[key] is not None:
                         pilot.require(existing[key] == data.get(key), f"La identidad de sesión cambió: {key}.")
                 existing.update(data)
-                pilot.require(existing["sourceFolder"] is not None, "El recibo no corresponde a un ensayo de arrastre.")
+                pilot.require(existing.get("trayTrace") if test_id == "windows-tray" else existing["sourceFolder"],
+                              "El recibo no corresponde al tipo de ensayo registrado.")
                 attempt = folder / f"verify-{uuid.uuid4().hex}"
                 attempt.mkdir()
                 deadline = time.monotonic() + (timeout or test["timeoutSeconds"])
@@ -294,11 +307,13 @@ class Center:
                 except ValueError as error:
                     raise RuntimeError(reason or "El verificador no devolvió un resultado válido.") from error
                 status = verdict["status"]
-                pilot.require(CODES.get(status) == code, "El código y el veredicto OLE difieren.")
+                pilot.require(CODES.get(status) == code, "El código y el veredicto de la prueba difieren.")
                 if status != "BLOCKED":
-                    self.archive_drop(folder, existing)
-                    if status == "PASS":
-                        self.archive_drop(attempt, existing)
+                    self.archive_evidence(folder, existing)
+                if status == "PASS" or test_id == "windows-tray":
+                    self.archive_evidence(attempt, existing)
+                if status == "BLOCKED" and test_id == "windows-tray":
+                    verdict["instructions"] = test["humanInstructions"]
                 pilot.write_json(attempt / "result.json", verdict)
                 return self.save(folder, existing, status, verdict["reason"], test["acceptanceCriteria"],
                                  action=test["nextAction"] if status != "PASS" else None, details=verdict)

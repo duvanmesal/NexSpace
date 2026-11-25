@@ -99,6 +99,22 @@ class TestCenterTests(unittest.TestCase):
         managed.assert_called_once_with(result["id"])
         explorer.assert_called_once_with("confirmed")
 
+    def test_tray_manual_start_has_no_explorer_fixture(self):
+        with (
+            patch.object(app.pilot, "build_latest", return_value=(Path("build"), {
+                "id": "build", "commit": "abc", "dirty": False})),
+            patch.object(app.pilot, "processes", return_value=[]),
+            patch.object(self.center, "command", return_value=(0, None, "")) as command,
+            patch.object(self.center, "managed", return_value={"trayTrace": "tray.jsonl", "hostPid": 42}),
+            patch.object(app.os, "startfile") as explorer,
+        ):
+            result = self.center.run("windows-tray")
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual(result["trayTrace"], "tray.jsonl")
+        self.assertEqual(command.call_args.args[1]["{session}"], result["id"])
+        self.assertIn("--tray", command.call_args.args[0])
+        explorer.assert_not_called()
+
     def test_historical_report_and_filters(self):
         session = "bcbf8d92f0094c6cb2dbc4c4be989051"
         report, = self.center.reports(identity=session)
