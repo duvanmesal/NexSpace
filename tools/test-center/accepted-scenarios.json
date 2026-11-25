@@ -1,0 +1,38 @@
+[
+  {
+    "id": "bcbf8d92f0094c6cb2dbc4c4be989051",
+    "testId": "explorer-drop",
+    "suiteId": null,
+    "status": "PASS",
+    "reason": "Gesto físico de Explorer revalidado con la traza OLE original, NexCore y SQLite en modo lectura.",
+    "buildId": "95fae67d-729f32df981141d192153c3eca8bab90",
+    "gitSha": "95fae67d1a92290a04b7b2c7fc6a93b9c51bab44",
+    "dirty": true,
+    "startedUtc": "2026-11-25T15:29:12.315042+00:00",
+    "finishedUtc": "2026-11-25T15:31:54.173+00:00",
+    "durationSeconds": 161.858,
+    "hostPid": 4200,
+    "profile": "00000000-0000-0000-0000-000000000001",
+    "group": "702dc3e4-bdf8-411c-81e1-1229db5d2a2d",
+    "approvedCriteria": [
+      "Lote OLE 1 con cuatro rutas en el grupo Archivos del perfil Principal.",
+      "SQLite confirma TXT, PDF, carpeta y acceso directo en la biblioteca del mismo host.",
+      "Los hashes de los originales coinciden con la captura previa.",
+      "Cuatro altas ole-drop y cero altas exitosas por selector o IPC de prueba en Archivos."
+    ],
+    "failedCriteria": [],
+    "blockers": [],
+    "publicSummary": "prototypes/web-shell/ACEPTACION_BETA.md#arrastre-físico-aceptado",
+    "nextAction": "Repetir para otro build o configuración que requiera aceptación propia.",
+    "details": {
+      "batch": 1,
+      "references": 4,
+      "oleReferences": 4,
+      "foreignOleReferences": 0,
+      "originalsIntact": true,
+      "coreOleAdds": 4,
+      "coreNonOleAdds": {},
+      "scope": "Windows 11 x64, escenario Explorer a NexContainers Archivos con biblioteca aislada."
+    }
+  }
+]

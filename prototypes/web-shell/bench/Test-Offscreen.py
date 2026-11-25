@@ -8,10 +8,15 @@ import sqlite3
 import subprocess
 import tempfile
 import time
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from pilot_support import powershell, write_json
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("pilot", type=Path)
 parser.add_argument("--capture", action="store_true")
+parser.add_argument("--metadata", type=Path)
 display = parser.add_mutually_exclusive_group()
 display.add_argument("--secondary", action="store_true")
 display.add_argument("--missing-monitor", action="store_true")
@@ -25,14 +30,18 @@ secondary = None
 if args.secondary:
     import json
 
-    result = subprocess.check_output(["pwsh", "-NoProfile", "-Command", """
+    result = subprocess.run([powershell(), "-NoProfile", "-Command", """
         Add-Type -AssemblyName System.Windows.Forms
         $s=[Windows.Forms.Screen]::AllScreens | Where-Object {-not $_.Primary} | Select-Object -First 1
-        if(!$s){exit 1}
+        if(!$s){exit 2}
         [ordered]@{key=$s.DeviceName;x=$s.WorkingArea.Left;y=$s.WorkingArea.Top;
             right=$s.WorkingArea.Right;bottom=$s.WorkingArea.Bottom}|ConvertTo-Json -Compress
-    """], text=True, creationflags=subprocess.CREATE_NO_WINDOW)
-    secondary = json.loads(result)
+    """], capture_output=True, text=True, creationflags=subprocess.CREATE_NO_WINDOW)
+    if result.returncode == 2:
+        print("No hay un monitor secundario conectado.")
+        sys.exit(2)
+    result.check_returncode()
+    secondary = json.loads(result.stdout)
 with sqlite3.connect(root / "floating.db") as db:
     if secondary:
         update = db.execute("UPDATE containers SET monitor_key=?,x=?,y=? WHERE name='Archivos'",
@@ -43,6 +52,8 @@ with sqlite3.connect(root / "floating.db") as db:
     else:
         update = db.execute("UPDATE containers SET x=-65000,y=-65000 WHERE name='Archivos'")
     assert update.rowcount == 1
+    profile = db.execute("SELECT active_id FROM profile_state WHERE id=1").fetchone()[0]
+    group = db.execute("SELECT id FROM containers WHERE name='Archivos'").fetchone()[0]
 
 user = ctypes.WinDLL("user32", use_last_error=True)
 user.GetDpiForWindow.argtypes = [wintypes.HWND]
@@ -67,6 +78,8 @@ def visit(hwnd, _):
 app = None
 try:
     app = subprocess.Popen([pilot / "nexspace-tauri-lab.exe"], cwd=pilot, env=env)
+    if args.metadata:
+        write_json(args.metadata, dict(hostPid=app.pid, database=str(root / "floating.db"), profile=profile, group=group))
     deadline = time.monotonic() + 20
     while time.monotonic() < deadline and app.poll() is None:
         windows.clear()
@@ -95,7 +108,7 @@ try:
     if args.capture:
         time.sleep(1.5)
         for title, surface in (("Archivos", "contenedor"), ("NexDock", "dock")):
-            subprocess.run(["pwsh", "-NoProfile", "-File", bench / "Capture-Floating.ps1",
+            subprocess.run([powershell(), "-NoProfile", "-File", bench / "Capture-Floating.ps1",
                             "-PilotId", str(app.pid), "-WindowId", str(windows[title]),
                             "-Surface", surface, "-WindowOnly"], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
 finally:

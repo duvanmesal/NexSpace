@@ -173,8 +173,20 @@ def snapshot(folder):
             for p in folder.rglob("*")}
 
 
-def fixtures(root, shell):
-    folder = root / "Arrastrar a Archivos"
+def drop_folder_name(identity):
+    return f"Arrastrar a Archivos [{identity[:8]}]"
+
+
+def drop_folder(root, trial):
+    name = trial.get("sourceFolder")
+    if name is None:
+        return root / "Arrastrar a Archivos"
+    require(name == drop_folder_name(trial["session"]), "La carpeta de arrastre no corresponde al ensayo.")
+    return root / name
+
+
+def fixtures(root, shell, identity):
+    folder = root / drop_folder_name(identity)
     folder.mkdir()
     (folder / "Notas de prueba.txt").write_text("Documento aislado.", encoding="utf-8")
     (folder / "Muestra.pdf").write_bytes(b"%PDF-1.4\n% NexSpace fixture\n%%EOF\n")
@@ -244,7 +256,7 @@ def launch_gate(storage):
             msvcrt.locking(file.fileno(), msvcrt.LK_UNLCK, 1)
 
 
-def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, open_explorer=True):
+def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, open_explorer=True, *, identity=None):
     shell = powershell(shell)
     with launch_gate(storage):
         build, manifest = build_latest(storage)
@@ -256,9 +268,10 @@ def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, ope
             library = f"sesión {session['id']}, base {session['database']}" if session else "biblioteca desconocida de un arranque anterior"
             print(f"Instancia existente {key[0]} ({origin}): {library}", file=sys.stderr)
         require(not live or allow_parallel, "Ya hay un piloto abierto. Ciérralo desde su bandeja o usa -AllowParallel para otra copia aislada.")
-        identity = uuid.uuid4().hex
+        identity = identity if identity is not None else uuid.uuid4().hex
         root = session_path(identity)
         evidence = root / "evidence"
+        require(not root.exists(), "El directorio de la sesión ya existe.")
         evidence.mkdir(parents=True)
         env = dict(os.environ, NEXSPACE_FLOATING_TEST_DIR=str(root), NEXSPACE_PILOT_SESSION_ID=identity)
         env.pop("NEXSPACE_FLOATING_DROP_TRACE", None)
@@ -269,12 +282,13 @@ def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, ope
             require(not drop, "El ensayo físico usa su propia biblioteca de demostración.")
             prepare.append(demo.resolve(strict=True))
         subprocess.run(prepare, env=env, check=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
-        folder = fixtures(root, shell) if drop else None
+        folder = fixtures(root, shell, identity) if drop else None
         target = None
         if drop:
             data = core_read(build, env, "manifest")
             target = next(group["id"] for group in data["groups"] if group["name"] == "Archivos")
-            write_json(root / "drop-trial.json", {"session": identity, "profile": data["profile"], "group": target})
+            write_json(root / "drop-trial.json", {"session": identity, "profile": data["profile"], "group": target,
+                                                  "sourceFolder": folder.name})
         with (evidence / "host.log").open("ab") as log:
             child = subprocess.Popen([build / HOST], cwd=build, env=env, stdin=subprocess.DEVNULL,
                                      stdout=log, stderr=log, creationflags=subprocess.DETACHED_PROCESS)
@@ -303,7 +317,7 @@ def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, ope
                 "La respuesta de NexCore no coincide con el host, la biblioteca y la compilación iniciados.")
         if folder and open_explorer:
             os.startfile(folder)
-        return {**receipt, **report, "dropTarget": target}
+        return {**receipt, **report, "dropTarget": target, "dropSource": str(folder) if folder else None}
 
 
 def stop_session(storage, identity, shell):
@@ -361,6 +375,7 @@ def main():
     run.add_argument("--allow-parallel", action="store_true")
     run.add_argument("--no-explorer", action="store_true")
     run.add_argument("--powershell")
+    run.add_argument("--id", help="Identificador reservado por Test Center.")
     for name in ("status", "stop"):
         command = commands.add_parser(name)
         command.add_argument("session", nargs="?" if name == "status" else None)
@@ -378,7 +393,8 @@ def main():
         publish(args.build, args.storage)
     else:
         if args.command == "run":
-            result = launch(STORAGE, args.demo, args.drop, args.allow_parallel, args.powershell, not args.no_explorer)
+            result = launch(STORAGE, args.demo, args.drop, args.allow_parallel, args.powershell, not args.no_explorer,
+                            identity=args.id)
         else:
             action = show_status if args.command == "status" else stop_session
             result = action(STORAGE, args.session, powershell(args.powershell))

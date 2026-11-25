@@ -15,13 +15,14 @@ import tempfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from pilot_support import STORAGE, build_latest, powershell
+from pilot_support import STORAGE, build_latest, powershell, write_json
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument("--pilot", type=Path)
 parser.add_argument("--open-folder", action="store_true", help="Abrir la carpeta de prueba con su asociación de Windows.")
 parser.add_argument("--shell-icons", action="store_true")
 parser.add_argument("--host-restart", action="store_true", help="Reiniciar el host Tauri dos veces con la misma copia.")
+parser.add_argument("--metadata", type=Path, help="Registrar la biblioteca y los procesos en Test Center.")
 options = parser.parse_args()
 base = options.pilot.resolve(strict=True) if options.pilot else build_latest(STORAGE)[0]
 shell = powershell()
@@ -32,11 +33,21 @@ copy = sqlite3.connect(home/"floating.db")
 source.backup(copy)
 copy.close()
 source.close()
+metadata = dict(database=str(home / "floating.db"), sourceFolder=str(home / "recursos"),
+                sidecarPids=[], hostPids=[])
+
+def record(**values):
+    metadata.update(values)
+    if options.metadata:
+        write_json(options.metadata, metadata)
 
 def launch():
-    return subprocess.Popen([base/"core/NexSpace.CorePilot.exe","--floating"],env=env,
+    process = subprocess.Popen([base/"core/NexSpace.CorePilot.exe","--floating"],env=env,
         stdin=subprocess.PIPE,stdout=subprocess.PIPE,text=True,encoding="utf-8",
         creationflags=subprocess.CREATE_NO_WINDOW)
+    metadata["sidecarPids"].append(process.pid)
+    record(sidecarPid=process.pid)
+    return process
 
 proc=launch()
 sequence=0
@@ -69,6 +80,8 @@ def verify_host(expected, excluded_title):
     user.GetDpiForWindow.restype = wintypes.UINT
     windows = {}
     with subprocess.Popen([base / "nexspace-tauri-lab.exe"], cwd=base, env=env) as host:
+        metadata["hostPids"].append(host.pid)
+        record(hostPid=host.pid)
         @visitor_type
         def visit(window, _):
             owner = wintypes.DWORD()
@@ -123,6 +136,7 @@ try:
     manifest=request("manifest")
     profile=manifest["profile"]
     group=request("createGroup",name="Prueba de paridad")
+    record(profile=profile, group=group)
     request("renameGroup",target=group,name="Trabajo")
     for path in files.iterdir():
         request("add",target=group,path=str(path))

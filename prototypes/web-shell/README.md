@@ -1,6 +1,6 @@
 # Laboratorio NexSpace · Concepto C
 
-La capa flotante experimental conectada a SQLite v3 se compila y ejecuta desde el directorio principal con [Build-Pilot y Run-Pilot](ENTORNO_TAURI.md). Los ensayos A/B siguientes corresponden al laboratorio histórico.
+La capa flotante experimental conectada a SQLite v3 se valida desde el directorio principal con [NexSpace Test Center](../../tools/test-center/README.md). Para compilar o lanzar el piloto directamente, consulta [Build-Pilot y Run-Pilot](ENTORNO_TAURI.md). Los ensayos A/B siguientes corresponden al laboratorio histórico.
 
 **Rama del piloto NexCore.** Consulta [la paridad funcional](PARIDAD.md) y [la matriz de aceptación](ACEPTACION_BETA.md). Las instrucciones de comparación A/B que siguen corresponden a la rama histórica `codex/web-shell-lab`.
 

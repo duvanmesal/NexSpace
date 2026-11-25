@@ -9,6 +9,7 @@
 *.log
 *.tmp
 *.temp
+__pycache__/
 
 # Visual Studio and IDE state
 .vs/

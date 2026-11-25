@@ -1,6 +1,7 @@
 """Exercise preflight and evidence matching with synthetic inputs, without creating an OLE event."""
 
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -41,31 +42,93 @@ class ToolsTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "inválido"):
             pilot.session_path("../outside")
 
-    def test_ole_requires_the_exact_paths_and_session(self):
-        session, pid, window = uuid.uuid4().hex, 42, "group_expected"
-        paths = [Path(tempfile.gettempdir()) / f"synthetic-{index}.txt" for index in range(4)]
-        expected = {drop.normalized(path): 0 for path in paths}
+    def test_drop_folder_is_session_specific_and_keeps_legacy_receipts_readable(self):
+        identity = "040b56a0" + "0" * 24
+        root = pilot.session_path(identity)
+        legacy = {"session": identity}
+        self.assertEqual(pilot.drop_folder(root, legacy), root / "Arrastrar a Archivos")
+        source = pilot.drop_folder_name(identity)
+        self.assertEqual(pilot.drop_folder(root, {**legacy, "sourceFolder": source}), root / source)
+        with self.assertRaisesRegex(RuntimeError, "no corresponde"):
+            pilot.drop_folder(root, {**legacy, "sourceFolder": pilot.drop_folder_name("abcd1234")})
 
-        def event(stage, **details):
-            return dict(session=session, hostPid=pid, stage=stage,
-                        detail=dict(window=window, batch=1, **details))
 
-        entries = [event("enter", accepted=True), event("drop", accepted=True, count=4)]
-        additions = [event("nexcore", source="ole-drop", target=str(path), ok=True, validated=True)
-                     for path in paths]
-        committed = event("persisted", result={"Ok": None})
+class DropEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.session = uuid.uuid4().hex
+        self.pid = 42
+        self.window = "group_expected"
+        self.paths = [Path(tempfile.gettempdir()) / "fixture" / f"item-{index}.txt" for index in range(4)]
+        self.expected = {drop.normalized(path) for path in self.paths}
 
-        def proven(events):
-            return drop.ole_evidence(events, expected, session, pid, window)
+    def batch(self, paths, batch=1, started=100):
+        def event(stage, ms, **details):
+            return dict(session=self.session, hostPid=self.pid, stage=stage, ms=ms,
+                        detail=dict(window=self.window, batch=batch, **details))
 
-        self.assertEqual(proven(entries + additions + [committed]), (True, True))
-        substituted = [*additions[:-1], event("nexcore", source="picker", target=str(paths[-1]),
-                                            ok=True, validated=True)]
-        self.assertEqual(proven(entries + substituted + [committed]), (True, False))
-        self.assertEqual(proven(entries + additions[:-1] + [additions[0], committed]), (True, False))
-        self.assertEqual(proven(entries + additions), (True, False))
-        self.assertEqual(proven([{**e, "session": "different"} for e in entries + additions + [committed]]),
-                         (False, False))
+        return [
+            event("enter", started - 1, accepted=True),
+            event("drop", started, accepted=True, count=len(paths)),
+            *(event("nexcore", started + 1, source="ole-drop", target=str(path), ok=True, validated=True)
+              for path in paths),
+            event("persisted", started + 2, result={"Ok": None}),
+        ]
+
+    def evidence(self, events):
+        return drop.ole_evidence(events, self.session, self.pid, self.window)
+
+    def stored(self, paths, milliseconds=101):
+        utc = f"1970-01-01T00:00:00.{milliseconds:03d}+00:00"
+        return {drop.normalized(path): (0, utc, str(path)) for path in paths}
+
+    def test_requires_native_enter_drop_and_completed_batch_on_correct_host(self):
+        events = self.batch(self.paths)
+        seen, batches = self.evidence(events)
+        self.assertTrue(seen)
+        self.assertEqual(drop.persisted_ole_paths(batches, self.stored(self.paths)), self.expected)
+        for rejected in (events[1:], events[:-1], events[:-2] + [events[-1], events[-2]]):
+            self.assertEqual(self.evidence(rejected), (True, []))
+        for wrong in ({"session": "different"}, {"hostPid": 43}):
+            self.assertEqual(self.evidence([{**event, **wrong} for event in events]), (False, []))
+        self.assertEqual(self.evidence([{**event, "detail": {**event["detail"], "window": "group_other"}}
+                                        for event in events]), (False, []))
+
+    def test_picker_ipc_duplicate_and_rejected_ack_cannot_prove_a_batch(self):
+        for change in ({"source": "picker"}, {"source": "test-ipc"},
+                       {"target": str(self.paths[1])}, {"ok": False}, {"validated": False}):
+            with self.subTest(change=change):
+                events = self.batch(self.paths)
+                events[2]["detail"].update(change)
+                self.assertEqual(self.evidence(events), (True, []))
+
+    def test_foreign_batch_is_diagnosed_and_does_not_poison_an_exact_retry(self):
+        foreign = [path.parent.parent / "different-fixture" / path.name for path in self.paths]
+        first = self.batch(foreign)
+        _, batches = self.evidence(first)
+        actual = self.stored(foreign)
+        self.assertEqual(len(drop.persisted_ole_paths(batches, actual) - self.expected), 4)
+        self.assertFalse(drop.persisted_ole_paths(batches, actual) & self.expected)
+
+        _, batches = self.evidence(first + self.batch(self.paths, batch=2, started=200))
+        actual.update(self.stored(self.paths, milliseconds=201))
+        self.assertEqual(drop.persisted_ole_paths(batches, actual) & self.expected, self.expected)
+
+    def test_ole_log_without_matching_sqlite_row_or_after_non_ole_reinsert_is_insufficient(self):
+        _, batches = self.evidence(self.batch(self.paths))
+        actual = self.stored(self.paths[:2])
+        actual.update(self.stored(self.paths[2:3], milliseconds=110))
+        self.assertEqual(drop.persisted_ole_paths(batches, actual),
+                         {drop.normalized(path) for path in self.paths[:2]})
+
+    def test_core_audit_is_scoped_to_session_profile_and_group(self):
+        entry = dict(session=self.session, profile="expected", target="files", source="ole-drop", ok=True)
+        picker = {**entry, "source": "picker"}
+        records = [entry, picker, {**picker, "target": "games"}, {**picker, "profile": "other"},
+                   {**picker, "session": "previous"}, {**entry, "source": "test-ipc"},
+                   {**picker, "ok": False}]
+        lines = ["información de diagnóstico", *(json.dumps(record) for record in records)]
+        self.assertEqual(drop.core_additions(lines, self.session, "expected", "files"),
+                         {"ole-drop": 1, "picker": 1, "test-ipc": 1})
 
 
 if __name__ == "__main__":

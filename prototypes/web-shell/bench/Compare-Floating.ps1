@@ -1,5 +1,5 @@
 param([ValidateSet('WinUI','Tauri')][string]$Engine,[ValidateSet(100,300)][int]$Cycles, [string]$PilotDirectory, [ValidateRange(1,180)][int]$IdleSeconds=10, [string]$EvidenceDirectory,
- [ValidateRange(1,120)][int]$SoakMinutes)
+ [ValidateRange(1,120)][int]$SoakMinutes, [string]$MetadataPath)
 $ErrorActionPreference='Stop'
 if($SoakMinutes -and ($Engine -ne 'Tauri' -or $Cycles)){throw 'El reposo usa Tauri sin ciclos.'}
 if(!$SoakMinutes -and !$Cycles){throw 'Indica los ciclos o el tiempo de reposo.'}
@@ -33,8 +33,13 @@ $timer=[Diagnostics.Stopwatch]::StartNew();$samples=@();$seen=@{};$stop=$null;$s
 $soakStart=$null
 $previousTopology=$null
 $completed=$false
+$launchUtc=[DateTime]::UtcNow
 $p=[Diagnostics.Process]::Start($info)
 try{
+ if($MetadataPath){
+    $metadata=@{hostPid=$p.Id;database=(Join-Path $data $db)}
+    Write-PilotJson $MetadataPath $metadata
+ }
  while(!$p.HasExited){
     $all=Get-CimInstance Win32_Process -Property ProcessId,ParentProcessId,CreationDate
     $dates=@{};foreach($row in $all){$dates[$row.ProcessId]=$row.CreationDate}
@@ -53,7 +58,25 @@ try{
     $elapsed=$timer.Elapsed.TotalSeconds
     $windows=if($SoakMinutes){[Counters]::VisibleWindows($p.Id)}
     if($rows.Count){$samples+=@([pscustomobject]@{sec=$elapsed;windows=$windows;rows=$rows})}
-    if(!$session -and $Engine -eq 'Tauri'){$session=(Get-ChildItem "$env:TEMP/NexSpace-Floating-$($p.Id)-*" -Directory -ea SilentlyContinue|Sort-Object CreationTime -Descending|Select-Object -First 1).FullName}
+    if(!$session -and $Engine -eq 'Tauri'){
+        $runDirectories=@(Get-ChildItem -LiteralPath $env:TEMP -Filter "NexSpace-Floating-$($p.Id)-*" -Directory |
+            Where-Object CreationTimeUtc -GE $launchUtc)
+        if($runDirectories.Count -gt 1){throw 'Más de un directorio coincide con el PID y el arranque del ensayo.'}
+        if($runDirectories.Count -eq 1){
+            $session=$runDirectories[0].FullName
+            if($MetadataPath){
+                $metadata.nativeEvidence=$session
+                Write-PilotJson $MetadataPath $metadata
+            }
+        }
+    }
+    if($MetadataPath -and $Engine -eq 'Tauri' -and !$metadata.sidecarPid){
+        $core=$rows | Where-Object name -EQ 'NexSpace.CorePilot' | Select-Object -First 1
+        if($core){
+            $metadata.sidecarPid=$core.pid
+            Write-PilotJson $MetadataPath $metadata
+        }
+    }
     $timeLimit=if($SoakMinutes){$SoakMinutes+2}else{8}
     if(($rows|Measure-Object private -Sum).Sum -gt 2GB -or ($rows|Measure-Object handles -Sum).Sum -gt 24000 -or $timer.Elapsed.TotalMinutes -gt $timeLimit){$stop='budget';break}
     if($SoakMinutes){

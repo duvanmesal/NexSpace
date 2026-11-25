@@ -1,5 +1,7 @@
 # NexSpace Tauri · Compilar, abrir y verificar un ensayo
 
+El punto de entrada para pruebas nuevas es [NexSpace Test Center](../../tools/test-center/README.md). El centro reutiliza estos scripts, archiva resultados por sesión y permite revalidar un arrastre con `-Verify -Session ID` sin abrir otro piloto.
+
 Desde la raíz de NexSpace, en Windows PowerShell 5.1 o PowerShell 7:
 
 ```powershell
@@ -35,15 +37,19 @@ La salida desde la bandeja sigue disponible. `-StopSession` valida la identidad 
 
 ## Arrastre físico reproducible
 
-1. Ejecutar `Run-Pilot.ps1 -DropTrial`. Se abre únicamente la carpeta **Arrastrar a Archivos**, con el TXT, el PDF, el acceso directo y la carpeta Proyecto. El mecanismo de accesos directos busca primero `pwsh.exe` y recurre a `powershell.exe`, incluido el instalado en Windows. Se puede fijar `-PowerShell powershell.exe`.
+1. Ejecutar `Run-Pilot.ps1 -DropTrial`. Abrir la ruta exacta que indica `dropSource`. Su nombre **Arrastrar a Archivos [ID corto]** distingue esta sesión de las carpetas abiertas en ensayos anteriores. Contiene el TXT, el PDF, el acceso directo y la carpeta Proyecto. El mecanismo de accesos directos busca primero `pwsh.exe` y recurre a `powershell.exe`. Se puede fijar `-PowerShell powershell.exe`.
 2. Colocar Explorer al lado de **Archivos** en la ventana del piloto. Seleccionar los cuatro elementos, arrastrarlos al interior de la tarjeta y soltar una vez.
-3. Ejecutar `python prototypes/web-shell/bench/Explorer-Drop.py --verify ID_DE_SESION`. El script encuentra su propio `drop.jsonl` y comprueba sesión, build, perfil, contenedor, rutas, tipos, hashes y lote OLE. Guarda `drop-verdict.json` en las evidencias. Usa 0 para PASS, 1 para FAIL y 2 para BLOCKED. Una referencia añadida por el selector o por el banco de IPC no acredita un gesto.
+3. Ejecutar `python prototypes/web-shell/bench/Explorer-Drop.py --verify ID_DE_SESION`. El script comprueba sesión, build, perfil, contenedor, rutas, tipos y hashes. Correlaciona la hora de alta de cada destino en SQLite con un lote OLE completo del host. Guarda `drop-verdict.json` en las evidencias. Usa 0 para PASS, 1 para FAIL y 2 para BLOCKED. Una referencia añadida por el selector o por el banco de IPC no acredita un gesto. Si se arrastraron rutas de otra carpeta, el resultado identifica esa carpeta y la esperada. Un arrastre correcto posterior puede acreditar las cuatro rutas de la sesión.
 
-La traza vincula el destino y sus coordenadas físicas y lógicas, el DPI, el recuento, la validación de cada ruta, el resultado de NexCore y el cierre del lote. El registro privado del sidecar distingue `ole-drop`, `picker` y `test-ipc` en sus altas. El bloqueo por sesión impide abrir dos hosts con la misma base gestionada.
+Test Center llama al verificador con `--read-only`. Conserva el veredicto original y registra su nueva lectura por separado. Las consultas a SQLite usan modo de solo lectura.
+
+La traza vincula el destino y sus coordenadas físicas y lógicas, el DPI, el recuento, la validación de cada ruta, el resultado de NexCore y el cierre del lote. La auditoría del sidecar distingue `ole-drop`, `picker` y `test-ipc`. En el grupo de prueba todas las altas exitosas deben proceder de OLE, ya que la auditoría registra el grupo y el origen de la operación sin guardar la ruta del elemento. El bloqueo por sesión impide abrir dos hosts con la misma base gestionada.
 
 ## Diagnóstico de los arrastres anteriores
 
 La trazabilidad histórica confirmó un lote OLE real de cuatro elementos en **Archivos** el 24 de noviembre de 2026 a las 16:30:39 UTC. Los cuatro tiempos de alta en SQLite caen entre la recepción y el cierre del lote con cuatro respuestas satisfactorias de NexCore. Los cuatro destinos correctos procedían de la carpeta de otro ensayo. El verificador anterior comparaba únicamente las rutas de la carpeta del ensayo destino. Al usar la carpeta que realmente originó el gesto, los cuatro tipos y los hashes coinciden. Para comparar el árbol histórico se normalizaron los separadores de las rutas relativas. Esto explica la discrepancia sin cambiar el criterio del ensayo nuevo, que exige una sola identidad.
+
+Un ensayo gestionado posterior recibió otro lote OLE de cuatro elementos el 24 de noviembre a las 17:04:50 UTC. El recibo y el diagnóstico de NexCore identificaron la misma base `floating.db`. Una consulta en solo lectura confirmó las cuatro altas en Archivos del perfil Principal, con los tipos esperados y dentro del intervalo del lote. La auditoría de NexCore registró cuatro altas `ole-drop` para ese perfil y grupo. Las rutas pertenecían a la carpeta de origen de un ensayo anterior. La verificación devolvió FAIL con cuatro referencias OLE ajenas, cero de las cuatro exigidas y los originales del ensayo intactos. Por cada referencia, NexCore devuelve el éxito después del commit de SQLite. El cierre del lote resume las respuestas de las cuatro operaciones.
 
 ## Validación del entorno
 
