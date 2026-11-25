@@ -4,13 +4,18 @@ param(
     [Parameter(Mandatory,ParameterSetName='Verify')][switch]$Verify,
     [Parameter(Mandatory,ParameterSetName='Report')][switch]$Report,
     [Parameter(Mandatory,ParameterSetName='Stop')][switch]$Stop,
+    [Parameter(Mandatory,ParameterSetName='Observe')][switch]$Observe,
     [Parameter(Mandatory,ParameterSetName='RunTest')]
     [Parameter(ParameterSetName='Report')][string]$Test,
     [Parameter(Mandatory,ParameterSetName='RunSuite')]
     [Parameter(ParameterSetName='Report')][string]$Suite,
     [Parameter(Mandatory,ParameterSetName='Verify')]
     [Parameter(Mandatory,ParameterSetName='Stop')]
+    [Parameter(Mandatory,ParameterSetName='Observe')]
     [Parameter(ParameterSetName='Report')][string]$Session,
+    [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('During','After')][string]$Phase,
+    [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('Pass','Fail')][string]$Outcome,
+    [Parameter(Mandatory,ParameterSetName='Observe')][string]$Note,
     [Parameter(ParameterSetName='Report')][string]$Build,
     [Parameter(ParameterSetName='Report')][string]$From,
     [Parameter(ParameterSetName='Report')][string]$To,
@@ -36,6 +41,12 @@ foreach ($option in @{
     if ($option.Value) { $arguments += @($option.Key, [string]$option.Value) }
 }
 if ($Report) { $arguments += @('--format', $Format.ToLowerInvariant()) }
+if ($Observe) {
+    $arguments += @('--phase', $Phase.ToLowerInvariant(), '--outcome', $Outcome.ToLowerInvariant(), '--note', $Note)
+    if ($Outcome -eq 'Pass') {
+        Write-Host 'Tienes 20 segundos para enfocar la carpeta del ensayo en Explorer y dejar el puntero dentro.'
+    }
+}
 try {
     $exe = Find-PilotPython $Python
     & $exe @arguments

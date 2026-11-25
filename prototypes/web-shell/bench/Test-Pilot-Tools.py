@@ -15,6 +15,9 @@ spec.loader.exec_module(drop)
 tray_spec = importlib.util.spec_from_file_location("tray_test_driver", Path(__file__).with_name("Tray-Recovery.py"))
 tray = importlib.util.module_from_spec(tray_spec)
 tray_spec.loader.exec_module(tray)
+explorer_spec = importlib.util.spec_from_file_location("explorer_test_driver", Path(__file__).with_name("Explorer-Coexistence.py"))
+explorer = importlib.util.module_from_spec(explorer_spec)
+explorer_spec.loader.exec_module(explorer)
 import pilot_support as pilot
 
 
@@ -177,6 +180,52 @@ class TraySequenceTests(unittest.TestCase):
         self.assertEqual(self.verify(self.ready, false_hide)[0], "FAIL")
         self.assertEqual(self.verify(self.ready, self.hidden, self.clicked, false_restore)[0], "FAIL")
         self.assertEqual(self.verify(self.hidden, self.clicked, self.visible)[0], "ERROR")
+
+
+class ExplorerVerdictTests(unittest.TestCase):
+    """Exercise the decision rule in memory; these records are never used as evidence."""
+
+    def setUp(self):
+        self.binding = dict(session="trial", hostPid=42, sidecarPid=55, buildId="build", gitSha="sha")
+        self.shell = dict(hwnd=5, pid=100, started="15")
+        self.folder = dict(hwnd=30, pid=100, started="15")
+        self.initial = dict(session="trial", observedMs=1, shell=self.shell)
+        self.during = self.checkpoint("during", 2, ["NexDock", "Archivos"], owned=[[42, "17"], [55, "18"]])
+        self.after = self.checkpoint("after", 4, [], remaining=[])
+        self.quit = dict(stage="tray-quit", session="trial", hostPid=42, build="build", ms=3)
+
+    def checkpoint(self, phase, stamp, windows, **metadata):
+        return dict(self.binding, phase=phase, operator={"outcome": "pass", "note": "test fixture"},
+                    native=dict(observedMs=stamp, shell=self.shell, explorer=self.folder, pilotWindows=windows),
+                    **metadata)
+
+    def test_requires_two_observations_and_native_close(self):
+        self.assertEqual(explorer.verdict(self.binding, self.initial, self.during, self.after, [self.quit], True)[0],
+                         "PASS")
+        self.assertEqual(explorer.verdict(self.binding, self.initial, None, None, [self.quit], True)[0], "BLOCKED")
+        for event in ({**self.quit, "session": "old"}, {**self.quit, "hostPid": 22},
+                      {**self.quit, "build": "old"}, {**self.quit, "ms": 9}):
+            self.assertEqual(explorer.verdict(self.binding, self.initial, self.during, self.after, [event], True)[0],
+                             "BLOCKED")
+
+    def test_records_operator_failure_and_rejects_foreign_or_unattested_checkpoints(self):
+        for changes, status in [({"operator": {"outcome": "fail", "note": "test failure"}}, "FAIL"),
+                                ({"operator": {"outcome": "pass", "note": ""}}, "ERROR"),
+                                ({"sidecarPid": 81}, "ERROR")]:
+            after = {**self.after, **changes}
+            self.assertEqual(explorer.verdict(self.binding, self.initial, self.during, after, [self.quit], True)[0],
+                             status)
+
+    def test_detects_changed_explorer_originals_and_observed_residuals(self):
+        for changes in ({"shell": {**self.shell, "started": "99"}},
+                        {"explorer": {**self.folder, "hwnd": 70}}):
+            after = {**self.after, "native": {**self.after["native"], **changes}}
+            self.assertEqual(explorer.verdict(self.binding, self.initial, self.during, after, [self.quit], True)[0],
+                             "FAIL")
+        self.assertEqual(explorer.verdict(self.binding, self.initial, self.during, self.after, [self.quit], False)[0],
+                         "FAIL")
+        after = {**self.after, "remaining": [[55, "18"]]}
+        self.assertEqual(explorer.verdict(self.binding, self.initial, self.during, after, [self.quit], True)[0], "FAIL")
 
 
 if __name__ == "__main__":

@@ -115,6 +115,23 @@ class TestCenterTests(unittest.TestCase):
         self.assertIn("--tray", command.call_args.args[0])
         explorer.assert_not_called()
 
+    def test_explorer_observation_uses_recorded_session_and_keeps_probe_attempt(self):
+        identity = "3" * 32
+        folder, session = self.center.session(identity, test="windows-explorer", source=False)
+        session["trayTrace"] = "test trace path"
+        app.pilot.write_json(folder / "session.json", session)
+        recorded = {"status": "BLOCKED", "checkpoint": {"phase": "during", "note": "probe fixture"}}
+        reply = folder / "reply.json"
+        app.pilot.write_json(reply, recorded)
+        with patch.object(self.center, "command", return_value=(2, reply, "")) as command:
+            result = self.center.observe(identity, "during", "pass", "test report")
+        self.assertTrue(result["checkpointRecorded"])
+        self.assertEqual(app.pilot.read_json(folder / "explorer-during.json"), recorded["checkpoint"])
+        values = command.call_args.args[1]
+        self.assertEqual(values["{session}"], identity)
+        self.assertEqual(values["{evidence}"], folder)
+        self.assertEqual(app.pilot.read_json(values["{operator}"])["note"], "test report")
+
     def test_historical_report_and_filters(self):
         session = "bcbf8d92f0094c6cb2dbc4c4be989051"
         report, = self.center.reports(identity=session)

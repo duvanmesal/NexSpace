@@ -41,6 +41,8 @@ La salida desde la bandeja sigue disponible. `-StopSession` valida la identidad 
 
 Para que la verificación y la evidencia queden en el historial, inicia el [ensayo de bandeja desde Test Center](../../tools/test-center/README.md#recuperación-desde-la-bandeja).
 
+El [ensayo guiado de convivencia con Explorer](../../tools/test-center/README.md#convivencia-con-explorer) reutiliza la misma traza nativa de bandeja para identificar el cierre. Test Center conserva por separado los archivos aislados, las identidades observadas de las ventanas y los puntos de control aportados por el operador.
+
 ## Arrastre físico reproducible
 
 1. Ejecutar `Run-Pilot.ps1 -DropTrial`. Abrir la ruta exacta que indica `dropSource`. Su nombre **Arrastrar a Archivos [ID corto]** distingue esta sesión de las carpetas abiertas en ensayos anteriores. Contiene el TXT, el PDF, el acceso directo y la carpeta Proyecto. El mecanismo de accesos directos busca primero `pwsh.exe` y recurre a `powershell.exe`. Se puede fijar `-PowerShell powershell.exe`.

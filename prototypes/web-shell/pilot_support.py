@@ -201,6 +201,20 @@ def fixtures(root, shell, identity):
     return folder
 
 
+def explorer_folder(root, identity):
+    return root / f"Explorer [{identity[:8]}]"
+
+
+def explorer_fixtures(root, identity):
+    folder = explorer_folder(root, identity)
+    for checkpoint in ("01-Durante", "02-Despues"):
+        target = folder / checkpoint
+        target.mkdir(parents=True)
+        (target / "Notas.txt").write_text("Archivo aislado de NexSpace.", encoding="utf-8")
+    write_json(root / "explorer-before.json", snapshot(folder))
+    return folder
+
+
 def processes(shell):
     command = ("[Console]::OutputEncoding=[Text.UTF8Encoding]::new($false);"
                "$rows=@(Get-CimInstance Win32_Process | "
@@ -257,8 +271,9 @@ def launch_gate(storage):
 
 
 def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, open_explorer=True, *,
-           identity=None, tray=False):
-    require(not (tray and (drop or allow_parallel)), "El ensayo de bandeja requiere una instancia exclusiva.")
+           identity=None, tray=False, explorer=False):
+    require(sum((drop, tray, explorer)) <= 1 and not ((tray or explorer) and allow_parallel),
+            "El ensayo físico requiere un modo y una instancia exclusivos.")
     shell = powershell(shell)
     with launch_gate(storage):
         build, manifest = build_latest(storage)
@@ -280,14 +295,16 @@ def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, ope
         env.pop("NEXSPACE_FLOATING_TRAY_TRACE", None)
         if drop:
             env["NEXSPACE_FLOATING_DROP_TRACE"] = "1"
-        if tray:
+        if tray or explorer:
             env["NEXSPACE_FLOATING_TRAY_TRACE"] = "1"
         prepare = [build / "core" / CORE, "--prepare-floating"]
         if demo:
-            require(not (drop or tray), "El ensayo físico usa su propia biblioteca de demostración.")
+            require(not (drop or tray or explorer), "El ensayo físico usa su propia biblioteca de demostración.")
             prepare.append(demo.resolve(strict=True))
         subprocess.run(prepare, env=env, check=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
         folder = fixtures(root, shell, identity) if drop else None
+        if explorer:
+            folder = explorer_fixtures(root, identity)
         target = None
         if drop:
             data = core_read(build, env, "manifest")
@@ -304,8 +321,8 @@ def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, ope
         receipt = dict(id=identity, executable=str(build / HOST), build=manifest["id"],
                        commit=manifest["commit"], builtUtc=manifest["builtUtc"],
                        database=str(root / "floating.db"), evidence=str(evidence), process=pid_key(owner))
-        if tray:
-            receipt["trial"] = "windows-tray"
+        if tray or explorer:
+            receipt["trial"] = "windows-explorer" if explorer else "windows-tray"
         index = receipt_path(storage, identity)
         index.parent.mkdir(parents=True, exist_ok=True)
         write_json(index, receipt)
@@ -322,12 +339,21 @@ def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, ope
                 and any(r["ProcessId"] == report["corePid"] and r["ParentProcessId"] == child.pid
                         and same_path(r["ExecutablePath"], build / "core" / CORE) for r in rows),
                 "La respuesta de NexCore no coincide con el host, la biblioteca y la compilación iniciados.")
-        if tray:
+        if tray or explorer:
             require(report.get("trayTracing") is True and (evidence / "tray.jsonl").is_file(),
                     "El host no inició la traza nativa de bandeja.")
         if folder and open_explorer:
             os.startfile(folder)
-        return {**receipt, **report, "dropTarget": target, "dropSource": str(folder) if folder else None}
+        return {**receipt, **report, "dropTarget": target, "dropSource": str(folder) if drop else None}
+
+
+def process_tree(rows, owner):
+    tree = {owner[0]}
+    while True:
+        extended = tree | {r["ProcessId"] for r in rows if r["ParentProcessId"] in tree and r["Started"] >= owner[1]}
+        if extended == tree:
+            return {pid_key(row) for row in rows if row["ProcessId"] in tree and row["Started"] >= owner[1]}
+        tree = extended
 
 
 def stop_session(storage, identity, shell):
@@ -337,13 +363,7 @@ def stop_session(storage, identity, shell):
     live, known = active_sessions(storage, rows)
     owner = tuple(receipt["process"])
     require(owner in known and known[owner]["id"] == identity, "El PID original de esta sesión ya no está activo.")
-    tree = {owner[0]}
-    for _ in range(len(rows)):
-        extended = tree | {r["ProcessId"] for r in rows if r["ParentProcessId"] in tree and r["Started"] >= owner[1]}
-        if extended == tree:
-            break
-        tree = extended
-    owned = {pid_key(row) for row in rows if row["ProcessId"] in tree}
+    owned = process_tree(rows, owner)
     write_json(root / "evidence/stop.json", {"session": identity})
     deadline = time.monotonic() + 12
     while time.monotonic() < deadline:
@@ -384,6 +404,7 @@ def main():
     trial = run.add_mutually_exclusive_group()
     trial.add_argument("--drop", action="store_true")
     trial.add_argument("--tray", action="store_true")
+    trial.add_argument("--explorer", action="store_true")
     run.add_argument("--allow-parallel", action="store_true")
     run.add_argument("--no-explorer", action="store_true")
     run.add_argument("--powershell")
@@ -406,7 +427,7 @@ def main():
     else:
         if args.command == "run":
             result = launch(STORAGE, args.demo, args.drop, args.allow_parallel, args.powershell, not args.no_explorer,
-                            identity=args.id, tray=args.tray)
+                            identity=args.id, tray=args.tray, explorer=args.explorer)
         else:
             action = show_status if args.command == "status" else stop_session
             result = action(STORAGE, args.session, powershell(args.powershell))

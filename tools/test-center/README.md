@@ -48,6 +48,22 @@ $ensayo.details.instructions
 
 El verificador exige una transición de visible a oculto, una solicitud nativa del menú mientras el dock sigue oculto y una confirmación de visibilidad tras esa misma solicitud. Vincula la traza al recibo del host, build y sesión. Hasta completar el recorrido, el resultado es **BLOCKED**. La prueba de recuperación y la prueba de cierre `windows-close` tienen criterios propios.
 
+## Convivencia con Explorer
+
+```powershell
+$ensayo = .\tools\NexSpace-Test.ps1 -Test windows-explorer | ConvertFrom-Json
+$ensayo | Select-Object id, buildId, hostPid, sidecarPid, sourceFolder, evidenceDirectory
+$ensayo.details.instructions
+```
+
+1. En la ventana que abrió el lanzador, entra a **01-Durante**. Selecciona `Notas.txt` y abre y cierra su menú contextual. Haz lo mismo con el menú contextual de una zona libre del escritorio. En NexDock abre y cierra un popover y en **Archivos** contrae y expande el contenedor. Vuelve a la primera carpeta en la misma ventana de Explorer.
+2. Registra lo observado con `-Observe -Session $ensayo.id -Phase During -Outcome Pass -Note 'TU OBSERVACIÓN'`. Mientras el comando espera, pon **01-Durante** en primer plano y deja el puntero en su contenido. Confirma `checkpointRecorded: true` antes de cerrar el piloto.
+3. Selecciona **Cerrar NexSpace experimental** en el menú de **NexSpace · ensayo de aceptación**. En la misma ventana de Explorer vuelve a la carpeta raíz, abre **02-Despues**, selecciona `Notas.txt` y comprueba que el menú contextual responde. Conserva intactos los archivos de prueba.
+4. Registra esas observaciones con `-Observe -Session $ensayo.id -Phase After -Outcome Pass -Note 'TU OBSERVACIÓN'`. Devuelve el foco a **02-Despues** y deja el puntero en su contenido hasta que el comando confirme el punto de control. Ante un problema, usa `-Outcome Fail` con una nota que describa qué ocurrió. Las notas son privadas.
+5. Ejecuta `.\tools\NexSpace-Test.ps1 -Verify -Session $ensayo.id`. Puedes repetir la verificación con el mismo ID aun después de cerrar el piloto.
+
+Los puntos de control separan lo que observó la persona de lo que observó Windows. El verificador exige el mismo escritorio de Explorer desde antes de abrir el piloto y la misma ventana de documentos en ambos puntos de control. También comprueba el foco, la ventana bajo el puntero en el punto muestreado, el cierre desde el menú nativo, el fin de los procesos observados y los hashes de los archivos aislados. La aceptación cubre el recorrido físico realizado. [Identidad del escritorio](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getshellwindow) · [Ventana bajo un punto](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-windowfrompoint) · [Ventanas de Explorer](https://learn.microsoft.com/en-us/windows/win32/shell/shell-windows)
+
 ## Informes e historial
 
 ```powershell
