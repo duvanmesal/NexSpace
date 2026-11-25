@@ -43,6 +43,17 @@ Para que la verificación y la evidencia queden en el historial, inicia el [ensa
 
 El [ensayo guiado de convivencia con Explorer](../../tools/test-center/README.md#convivencia-con-explorer) reutiliza la misma traza nativa de bandeja para identificar el cierre. Test Center conserva por separado los archivos aislados, las identidades observadas de las ventanas y los puntos de control aportados por el operador.
 
+## Cierre de los menús de las islas
+
+Para reproducir el recorrido físico, abre un piloto aislado con `Run-Pilot.ps1 -DropTrial`. En una isla con referencias, como **Juegos**, comprueba por separado **···** y el clic derecho sobre **Controles.txt**.
+
+1. Abre cada menú, pulsa fuera de su superficie dentro de la isla y vuelve a abrirlo. Repite con **Escape** y comprueba que el foco vuelve al botón o al archivo invocador.
+2. Cambia de un menú a otro con **···**, clic derecho sobre otro recurso o **Shift+F10**. Elige **Mostrar lista** en Opciones y **Renombrar** en el menú de un archivo. Comprueba que el menú se cierra y que la acción o el formulario aparece. Puedes cancelar el formulario.
+3. Con un menú abierto, haz clic en otra isla y luego repite desde el primer panel con Explorer. Comprueba que el menú se descarta y que el destino conserva su interacción. En el popover de una categoría, pulsa **Escape** una vez para cerrar el menú y otra vez para cerrar el popover.
+4. Comprueba que puedes volver a interactuar con una referencia, contraer y expandir la isla y recuperar NexDock desde la bandeja. Si repites el arrastre físico, usa los archivos aislados de la carpeta abierta por el lanzador y verifica esa sesión mediante el [recorrido de arrastre](#arrastre-físico-reproducible).
+
+`NexSpace-Test.ps1 -Test panel-menus` ejecuta los componentes React en Edge headless con un puente IPC de prueba, incluido el aviso de pérdida de foco que escucha la WebView. El cambio físico entre ventanas Tauri y Explorer se comprueba en el paso 3.
+
 ## Arrastre físico reproducible
 
 1. Ejecutar `Run-Pilot.ps1 -DropTrial`. Abrir la ruta exacta que indica `dropSource`. Su nombre **Arrastrar a Archivos [ID corto]** distingue esta sesión de las carpetas abiertas en ensayos anteriores. Contiene el TXT, el PDF, el acceso directo y la carpeta Proyecto. El mecanismo de accesos directos busca primero `pwsh.exe` y recurre a `powershell.exe`. Se puede fijar `-PowerShell powershell.exe`.

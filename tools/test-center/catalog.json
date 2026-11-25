@@ -112,6 +112,27 @@
       "unavailableReason": null,
       "nextAction": "Consultar el log de las pruebas Python."
     },
+    "panel-menus": {
+      "name": "Menús de las islas y popovers",
+      "description": "Ejecuta los paneles React en Edge sin interfaz con un puente Tauri de prueba.",
+      "component": "NexContainers y NexDock",
+      "category": "NexContainers",
+      "type": "automática",
+      "platform": "Windows 11 x64",
+      "requirements": ["Node, dependencias npm del piloto y Microsoft Edge."],
+      "preparation": null,
+      "execution": [["node", "prototypes/web-shell/bench/Test-PanelMenus.mjs"]],
+      "verification": null,
+      "acceptanceCriteria": ["Opciones y menú contextual cierran al pulsar Escape, hacer clic fuera, cambiar el foco o seleccionar una acción.",
+        "Otro menú puede abrirse, los clics de archivos y contenedores llegan a su destino y Escape conserva el orden del popover."],
+      "timeoutSeconds": 90,
+      "humanRequired": false,
+      "evidence": "artifacts/test-center/sessions/{session}",
+      "availability": "READY",
+      "unavailableReason": null,
+      "blockedExitCodes": [2],
+      "nextAction": "Consultar el log de Edge y el caso fallido."
+    },
     "test-center-tools": {
       "name": "Regresión del Test Center",
       "description": "Comprueba estados, historial, identidad, informes y suites sin simular acciones físicas.",
@@ -557,7 +578,7 @@
     },
     "regression": {
       "description": "Pruebas automáticas de herramientas, persistencia, reinicio y ventanas.",
-      "tests": ["artifact-integrity", "pilot-tools", "test-center-tools", "net-debug", "net-release", "nexcore-floating", "nexcore-host-restart", "windows-close", "windows-offscreen"]
+      "tests": ["artifact-integrity", "pilot-tools", "test-center-tools", "panel-menus", "net-debug", "net-release", "nexcore-floating", "nexcore-host-restart", "windows-close", "windows-offscreen"]
     },
     "beta-readiness": {
       "description": "Verificación del build y tareas físicas obligatorias que requieren su propia evidencia.",

@@ -794,6 +794,13 @@ pub fn run() {
             if let WindowEvent::DragDrop(drop) = event {
                 native_drop(win, drop);
             }
+            if matches!(event, WindowEvent::Focused(false))
+                && matches!(scope(win.label()), Some(("group" | "category", _, _)))
+            {
+                if let Some(view) = win.app_handle().get_webview_window(win.label()) {
+                    let _ = view.eval("window.dispatchEvent(new Event('panel-focus-lost'))");
+                }
+            }
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 let label = win.label().to_owned();
                 if label == "dock" {

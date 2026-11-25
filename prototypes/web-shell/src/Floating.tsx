@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useLayoutEffect, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import {
   Folder,
@@ -61,6 +61,9 @@ type Form = {
   confirm: string;
   apply: (value: string) => Promise<void>;
 };
+type PanelMenu =
+  | { kind: "options"; trigger: HTMLButtonElement }
+  | { kind: "entry"; trigger: HTMLButtonElement; row: Row };
 const label = new URLSearchParams(location.search).get("floating") || "dock";
 const [role, profile, target] = label.split("_");
 const panel = role === "group" || role === "category";
@@ -82,11 +85,13 @@ function Button({
   action,
   children,
   selected = false,
+  expanded,
 }: {
   name: string;
-  action: () => void;
+  action: React.MouseEventHandler<HTMLButtonElement>;
   children: React.ReactNode;
   selected?: boolean;
+  expanded?: boolean;
 }) {
   return (
     <button
@@ -94,6 +99,7 @@ function Button({
       className={selected ? "selected" : ""}
       title={name}
       aria-label={name}
+      aria-expanded={expanded}
       onClick={action}
     >
       {children}
@@ -113,8 +119,9 @@ export function Floating() {
   const [data, setData] = useState<Manifest>();
   const [page, setPage] = useState<Page>();
   const [error, setError] = useState("");
-  const [menu, setMenu] = useState(false);
-  const [entry, setEntry] = useState<Row>();
+  const [menu, setMenu] = useState<PanelMenu>();
+  const menuSurface = useRef<HTMLElement>(null);
+  const entry = menu?.kind === "entry" ? menu.row : undefined;
   const [offset, setOffset] = useState(0);
   const [form, setForm] = useState<Form>();
   const [value, setValue] = useState("");
@@ -185,15 +192,11 @@ export function Floating() {
       category: role === "category",
       ...fields,
     });
-    setMenu(false);
-    setEntry(undefined);
     setError("");
   }
   function ask(f: Form) {
     setValue(f.value || "");
     setForm(f);
-    setMenu(false);
-    setEntry(undefined);
   }
   function rename(title: string, current: string, op: string, fields: Fields) {
     ask({
@@ -206,12 +209,37 @@ export function Floating() {
   function remove(title: string, op: string, fields: Fields) {
     ask({ title, confirm: "Quitar", apply: () => act(op, fields) });
   }
+  function closeMenuAndRestoreFocus() {
+    setMenu(undefined);
+    if (menu?.trigger.isConnected) menu.trigger.focus({ preventScroll: true });
+  }
+  useLayoutEffect(() => {
+    const surface = menuSurface.current;
+    if (!menu || !surface) return;
+    const dismissOutside = (event: Event) => {
+      const target = event.target;
+      if (target instanceof Node && !surface.contains(target) && !menu.trigger.contains(target)) {
+        setMenu(undefined);
+      }
+    };
+    const dismiss = () => setMenu(undefined);
+    // Observe the initiating input without consuming the click or the new focus.
+    document.addEventListener("pointerdown", dismissOutside, true);
+    document.addEventListener("focusin", dismissOutside);
+    window.addEventListener("blur", dismiss);
+    window.addEventListener("panel-focus-lost", dismiss);
+    surface.querySelector("button")?.focus({ preventScroll: true });
+    return () => {
+      document.removeEventListener("pointerdown", dismissOutside, true);
+      document.removeEventListener("focusin", dismissOutside);
+      window.removeEventListener("blur", dismiss);
+      window.removeEventListener("panel-focus-lost", dismiss);
+    };
+  }, [menu]);
   function escape() {
     if (form) setForm(undefined);
-    else if (menu || entry) {
-      setMenu(false);
-      setEntry(undefined);
-    } else if (role === "category" || role === "organize")
+    else if (menu) closeMenuAndRestoreFocus();
+    else if (role === "category" || role === "organize")
       run(() => native("dismiss"));
   }
   useEffect(() => {
@@ -223,7 +251,7 @@ export function Floating() {
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
-  }, [form, menu, entry]);
+  }, [form, menu]);
   const drag = useRef<number | null>(null);
   const queue = useRef(Promise.resolve<unknown>(null));
   const updating = useRef(false);
@@ -255,10 +283,7 @@ export function Floating() {
     };
   }
   const picker = (folder: boolean) =>
-    run(async () => {
-      setMenu(false);
-      await invoke("pick", { folder });
-    });
+    run(() => invoke("pick", { folder }));
   const report = error ? (
     <output role="alert">
       {error}{" "}
@@ -577,9 +602,10 @@ export function Floating() {
         {(popup || !page?.collapsed) && (
           <Button
             name="Opciones"
-            action={() => {
-              setMenu(!menu);
-              setEntry(undefined);
+            expanded={menu?.kind === "options"}
+            action={(event) => {
+              const trigger = event.currentTarget;
+              setMenu((current) => current?.kind === "options" ? undefined : { kind: "options", trigger });
             }}
           >
             <Ellipsis />
@@ -612,8 +638,7 @@ export function Floating() {
               onClick={() => run(() => act("open", { item: row.id }))}
               onContextMenu={(e) => {
                 e.preventDefault();
-                setEntry(row);
-                setMenu(false);
+                setMenu({ kind: "entry", row, trigger: e.currentTarget });
               }}
               onKeyDown={(e) => {
                 if (
@@ -621,7 +646,7 @@ export function Floating() {
                   (e.shiftKey && e.key === "F10")
                 ) {
                   e.preventDefault();
-                  setEntry(row);
+                  setMenu({ kind: "entry", row, trigger: e.currentTarget });
                 }
               }}
             >
@@ -662,8 +687,17 @@ export function Floating() {
           </button>
         </div>
       )}
-      {(menu || entry) && (
-        <aside className="choices">
+      {menu && (
+        <aside
+          className="choices"
+          ref={menuSurface}
+          aria-label={entry ? "Acciones de " + entry.name : "Opciones del panel"}
+          onClickCapture={(event) => {
+            if (event.target instanceof Element && event.target.closest("button")) {
+              closeMenuAndRestoreFocus();
+            }
+          }}
+        >
           {entry ? (
             <>
               <strong>{entry.name}</strong>
@@ -707,10 +741,9 @@ export function Floating() {
               {!popup && (
                 <>
                   {page?.multipleDisplays && !page.locked && (
-                    <button onClick={() => run(async () => {
-                      await invoke("frame", { phase: "next-monitor", resize: false, dx: 0, dy: 0 });
-                      setMenu(false);
-                    })}>Mover a otra pantalla</button>
+                    <button onClick={() => run(() =>
+                      invoke("frame", { phase: "next-monitor", resize: false, dx: 0, dy: 0 })
+                    )}>Mover a otra pantalla</button>
                   )}
                   <button
                     onClick={() =>
