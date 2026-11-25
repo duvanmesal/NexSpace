@@ -692,7 +692,8 @@ export function Floating() {
           className="choices"
           ref={menuSurface}
           aria-label={entry ? "Acciones de " + entry.name : "Opciones del panel"}
-          onClickCapture={(event) => {
+          onClick={(event) => {
+            // The item's click handler must run before this removes its DOM node.
             if (event.target instanceof Element && event.target.closest("button")) {
               closeMenuAndRestoreFocus();
             }

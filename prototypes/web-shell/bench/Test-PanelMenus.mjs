@@ -1,13 +1,13 @@
 // Runs the real React panel in a disposable Edge profile with a stubbed Tauri bridge.
-import { execFile } from "node:child_process";
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { createServer } from "vite";
+import { connect, until } from "./devtools.mjs";
 
-const run = promisify(execFile);
 const root = fileURLToPath(new URL("../", import.meta.url));
 
 async function findEdge() {
@@ -35,19 +35,49 @@ async function test(edge) {
   try {
     await server.listen();
     const { port } = server.httpServer.address();
-    for (const role of ["group", "category"]) {
+    for (const role of ["group", "category", "dock"]) {
       const profile = await mkdtemp(join(base, "NexSpace-panel-menus-"));
+      const browser = spawn(edge, [
+        "--headless=new", "--no-first-run", "--disable-extensions", "--remote-debugging-port=0",
+        `--user-data-dir=${profile}`, "--window-size=550,460",
+        `http://127.0.0.1:${port}/bench/panel-menus.html?floating=${role}_profile_panel`,
+      ], { windowsHide: true, stdio: "ignore" });
+      const exited = once(browser, "exit");
+      let page;
       try {
-        const { stdout } = await run(edge, [
-          "--headless=new", "--no-first-run", "--disable-extensions",
-          `--user-data-dir=${profile}`, "--window-size=550,460",
-          "--dump-dom", "--virtual-time-budget=5000",
-          `http://127.0.0.1:${port}/bench/panel-menus.html?floating=${role}_profile_panel`,
-        ], { timeout: 35_000, windowsHide: true });
-        const result = stdout.match(/<pre id="result" data-status="([^"]+)">([^<]*)<\/pre>/);
-        if (result?.[1] !== "pass") throw new Error(`${role}: ${result?.[2] || "sin resultado del navegador"}`);
-        console.log(`PASS ${role} · ${result[2]}`);
+        const debugPort = await until(async () => {
+          try {
+            return parseInt(await readFile(join(profile, "DevToolsActivePort"), "utf-8"), 10);
+          } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+          }
+        }, "Edge no abrió DevTools.");
+        const target = await until(async () => {
+          const targets = await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json();
+          return targets.find(({ url }) => url.includes("panel-menus.html"));
+        }, "No se encontró la página de pruebas.");
+        page = await connect(target.webSocketDebuggerUrl);
+        const result = await until(async () => {
+          const state = await page.read(`(() => {
+            const result = document.getElementById("result");
+            return { status: result?.dataset.status, text: result?.textContent, input: window.menuTestInput };
+          })()`);
+          if (state.input) {
+            await page.click(state.input);
+            await page.read("window.completeMenuTestInput()");
+          }
+          return state.status && state.status !== "pending" ? state : null;
+        }, `${role}: sin resultado del navegador.`, 25_000);
+        if (result.status !== "pass") throw new Error(`${role}: ${result.text}`);
+        console.log(`PASS ${role} · ${result.text}`);
       } finally {
+        if (page) {
+          await page.send("Browser.close").catch(() => undefined);
+          page.close();
+        } else {
+          browser.kill();
+        }
+        await exited;
         if (!/^NexSpace-panel-menus-[^/\\]+$/.test(relative(base, profile))) {
           throw new Error("El perfil Headless no pertenece al directorio temporal.");
         }

@@ -52,7 +52,7 @@ Para reproducir el recorrido físico, abre un piloto aislado con `Run-Pilot.ps1 
 3. Con un menú abierto, haz clic en otra isla y luego repite desde el primer panel con Explorer. Comprueba que el menú se descarta y que el destino conserva su interacción. En el popover de una categoría, pulsa **Escape** una vez para cerrar el menú y otra vez para cerrar el popover.
 4. Comprueba que puedes volver a interactuar con una referencia, contraer y expandir la isla y recuperar NexDock desde la bandeja. Si repites el arrastre físico, usa los archivos aislados de la carpeta abierta por el lanzador y verifica esa sesión mediante el [recorrido de arrastre](#arrastre-físico-reproducible).
 
-`NexSpace-Test.ps1 -Test panel-menus` ejecuta los componentes React en Edge headless con un puente IPC de prueba, incluido el aviso de pérdida de foco que escucha la WebView. El cambio físico entre ventanas Tauri y Explorer se comprueba en el paso 3.
+`NexSpace-Test.ps1 -Test panel-menus` ejecuta los componentes React en Edge headless con un puente IPC de prueba. Las selecciones se envían mediante el protocolo de DevTools para reproducir la captura y el burbujeo de un clic de navegador. Las pruebas comprueban el editor de referencias, la presentación de lista, los comandos del dock y el descarte de menús. El cambio físico entre ventanas Tauri y Explorer se comprueba en el paso 3. [Auditoría de las acciones](ACCIONES_PILOTO.md)
 
 ## Arrastre físico reproducible
 

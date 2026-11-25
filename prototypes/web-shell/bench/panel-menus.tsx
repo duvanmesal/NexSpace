@@ -6,24 +6,35 @@ import "../src/style.css";
 const result = document.querySelector<HTMLPreElement>("#result")!;
 const root = createRoot(document.querySelector("#root")!);
 const popup = location.search.includes("floating=category_");
+const dock = location.search.includes("floating=dock");
 const calls: string[] = [];
 const checks: string[] = [];
 let completeMove: (() => void) | undefined;
 let collapsed = false;
 let list = false;
+let selected: string | null = null;
 
 Object.assign(window, {
   IS_REACT_ACT_ENVIRONMENT: true,
   __TAURI_INTERNALS__: {
     async invoke(command: string, fields: {
       op?: string;
+      category?: string;
       request?: { op: string; item?: string; flag?: boolean };
     }) {
       if (command === "surface") {
         calls.push("surface:" + fields.op);
+        if (fields.op === "category") {
+          selected = selected ? null : fields.category!;
+          window.dispatchEvent(new Event("library-changed"));
+        }
         return;
       }
       const request = fields.request!;
+      if (request.op === "manifest") {
+        return { profile: "profile", groups: [], profiles: [], vertical: false, selected,
+          categories: [{ id: "files", name: "Archivos", glyph: "·", containerId: null }] };
+      }
       if (request.op === "page") {
         return {
           name: "Archivos", art: {}, collapsed, list, total: 2,
@@ -81,6 +92,32 @@ async function key(target: EventTarget, key: string, shiftKey = false) {
   });
 }
 
+async function select(target: HTMLButtonElement) {
+  target.scrollIntoView({ block: "nearest" });
+  const rect = target.getBoundingClientRect();
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  require(target.contains(document.elementFromPoint(x, y)), "La opción no recibe clics: " + target.textContent);
+  let trusted = false;
+  const observe = (event: MouseEvent) => {
+    trusted = event.isTrusted && event.composedPath().includes(target);
+  };
+  document.addEventListener("click", observe, { capture: true, once: true });
+  await new Promise<void>((resolve) => {
+    // The driver sends a browser click outside React act(), including its capture and bubble phases.
+    Object.assign(window, {
+      menuTestInput: { x, y },
+      completeMenuTestInput: () => {
+        Object.assign(window, { menuTestInput: null });
+        resolve();
+      },
+    });
+  });
+  document.removeEventListener("click", observe, true);
+  require(trusted, "La prueba no recibió un clic generado por el navegador.");
+  await act(async () => {});
+}
+
 async function caseOf(name: string, step: () => Promise<void>) {
   await step();
   checks.push(name);
@@ -88,6 +125,19 @@ async function caseOf(name: string, step: () => Promise<void>) {
 
 async function test() {
   await act(async () => root.render(<Floating />));
+  if (dock) {
+    await caseOf("NexDock: categoría activa, cierre y acceso a Espacio de trabajo", async () => {
+      await select(button("Archivos"));
+      require(button("Archivos").getAttribute("aria-pressed") === "true" && calls.at(-1) === "surface:category",
+              "NexDock no activó la categoría.");
+      await select(button("Archivos"));
+      require(button("Archivos").getAttribute("aria-pressed") === "false", "NexDock no desactivó la categoría.");
+      await select(button("Organizar espacio y perfiles"));
+      require(calls.at(-1) === "surface:organize", "Falta la solicitud de Espacio de trabajo.");
+    });
+    await act(async () => root.unmount());
+    return;
+  }
   const options = button("Opciones");
   const notes = button("Notas");
   const project = button("Proyecto");
@@ -134,9 +184,24 @@ async function test() {
             "El menú de archivo consumió el clic exterior.");
   });
 
+  await caseOf("archivo: Renombrar abre el editor y Cancelar conserva el nombre", async () => {
+    const before = calls.length;
+    await tap(notes, true);
+    await select(button("Renombrar"));
+    const editor = document.querySelector('[role="dialog"][aria-label="Nombre de referencia"]');
+    require(!menu() && editor?.querySelector("input")?.value === "Notas", "Renombrar no abrió el editor precargado.");
+    await select(button("Cancelar"));
+    require(!document.querySelector('[role="dialog"]') && button("Notas") && calls.length === before,
+            "Cancelar modificó los datos o dejó abierto el editor.");
+    await tap(notes, true);
+    require(menu(), "No se pudo volver a abrir el menú.");
+    await key(document.activeElement!, "Escape");
+    require(!menu() && calls.length === before, "Escape ejecutó accidentalmente una acción.");
+  });
+
   await caseOf("archivo: selección cierra de inmediato y el IPC no cierra otro menú", async () => {
     await tap(notes, true);
-    await tap(button("Mover después"));
+    await select(button("Mover después"));
     require(!menu() && calls.at(-1) === "moveItem:Notas" && completeMove, "Seleccionar no cerró la acción pendiente.");
     await tap(options);
     await act(async () => completeMove!());
@@ -168,7 +233,7 @@ async function test() {
   } else {
     await caseOf("contenedor: elegir una opción, contraer y expandir", async () => {
       await tap(options);
-      await tap(button("Mostrar lista"));
+      await select(button("Mostrar lista"));
       require(!menu() && calls.at(-1) === "listView:" && document.querySelector("section.rows"),
               "La selección no cerró Opciones o no cambió a lista.");
       await tap(options);
