@@ -34,5 +34,43 @@
       "coreNonOleAdds": {},
       "scope": "Windows 11 x64, escenario Explorer a NexContainers Archivos con biblioteca aislada."
     }
+  },
+  {
+    "id": "5f4f1ddb4eb64d93b22f09cfde5c4e36",
+    "testId": "windows-monitors-100",
+    "suiteId": null,
+    "buildId": "77fb99f0-458bb07401724084a1de8b356e5e2bae",
+    "gitSha": "77fb99f090fb90af64c3f3c6704f7536b27e8180",
+    "dirty": true,
+    "startedUtc": "2026-11-26T19:09:46.097322+00:00",
+    "hostPid": 11688,
+    "sidecarPid": 13144,
+    "status": "PASS",
+    "reason": "Traslado, recuperación, reconexión y cierre acreditados en dos pantallas a 96 DPI.",
+    "finishedUtc": "2026-11-26T19:12:13.208+00:00",
+    "durationSeconds": 147.111,
+    "approvedCriteria": [
+      "Dos pantallas a 96 DPI, traslado de Archivos de principal a secundaria y posición comprobada en SQLite.",
+      "Desconexión, recuperación en el principal y retorno al secundario con NexDock operativo y cuatro ventanas accesibles.",
+      "Perfiles, referencias y archivos íntegros, con posición persistida y cierre ordinario sin procesos residuales."
+    ],
+    "failedCriteria": [],
+    "blockers": [],
+    "publicSummary": "prototypes/web-shell/ACEPTACION_BETA.md#monitores-al-100--aceptados",
+    "nextAction": null,
+    "details": {
+      "stages": [
+        "baseline",
+        "moved",
+        "disconnected",
+        "reconnected"
+      ],
+      "dpi": 96,
+      "closure": {
+        "status": "closed",
+        "observedProcesses": 12,
+        "remaining": []
+      }
+    }
   }
 ]
