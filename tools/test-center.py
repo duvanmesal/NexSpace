@@ -168,9 +168,11 @@ class Center:
             raise TimeoutError("Se agotó el plazo de la prueba.")
         return run_command(argv, folder, phase, remaining)
 
-    def run(self, test_id, timeout=None, *, in_suite=False):
+    def run(self, test_id, timeout=None, *, in_suite=False, performance_mode=None):
         if test_id not in self.tests:
             raise ValueError(f"Prueba desconocida: {test_id}.")
+        if performance_mode and test_id != "performance-hours":
+            raise ValueError("-LongRun y -Probe se aplican a performance-hours.")
         test = self.tests[test_id]
         identity = uuid.uuid4().hex
         folder, session = self.session(identity, test=test_id)
@@ -181,12 +183,14 @@ class Center:
             return result("ERROR", session["sourceError"])
         if test["humanRequired"] and in_suite:
             return result("BLOCKED", "La suite requiere una comprobación humana explícita.")
+        if test_id == "performance-hours" and not performance_mode:
+            return result("BLOCKED", "Usa -LongRun para autorizar el ensayo prolongado o -Probe para comprobar el banco.")
         if not test["execution"]:
             return result("BLOCKED" if test["humanRequired"] else "NOT_TESTED", test["unavailableReason"])
         if test.get("requiresPwsh") and not shutil.which("pwsh.exe"):
             return result("BLOCKED", "Este banco requiere PowerShell 7.")
         values = {"{session}": identity, "{evidence}": folder, "{metadata}": folder / "adapter.json",
-                  "{python}": sys.executable}
+                  "{python}": sys.executable, "{performanceMode}": performance_mode}
         deadline = time.monotonic() + (timeout or test["timeoutSeconds"])
         try:
             if test.get("requiresBuild"):
@@ -229,6 +233,9 @@ class Center:
                         session.update(self.managed(identity))
                         pilot.write_json(folder / "session.json", session)
                 if test["humanRequired"]:
+                    if test_id == "performance-hours":
+                        return result("BLOCKED", "El muestreo se inició. Consulta -Report para ver el avance.",
+                                      details={"instructions": test["humanInstructions"], "profile": performance_mode})
                     if session["sourceFolder"]:
                         os.startfile(session["sourceFolder"])
                     return result("BLOCKED", "El ensayo está abierto y espera la comprobación física.",
@@ -255,6 +262,10 @@ class Center:
             checkpoints = Path(session["evidenceDirectory"])
             files = (checkpoints / "uia-initial.json", checkpoints / "accessibility-keyboard.json",
                      checkpoints / "accessibility-narrator.json")
+        elif session["testId"] == "performance-hours":
+            checkpoints = Path(session["evidenceDirectory"])
+            files = tuple(checkpoints / name for name in ("performance-plan.json", "performance-summary.json",
+                                                          "performance-responsiveness.json", "performance-closure.json"))
         else:
             files = (evidence / "tray.jsonl",)
             if session["testId"] == "windows-explorer":
@@ -276,7 +287,7 @@ class Center:
         test_id = existing["testId"] if existing else "explorer-drop"
         if not existing and receipt.is_file():
             test_id = pilot.read_json(receipt).get("trial") or test_id
-        if test_id not in ("explorer-drop", "windows-tray", "windows-explorer", "windows-accessibility"):
+        if test_id not in ("explorer-drop", "windows-tray", "windows-explorer", "windows-accessibility", "performance-hours"):
             raise ValueError("La sesión no admite verificación diferida.")
         if not existing:
             if not receipt.is_file() or (known and not (root / "floating.db").is_file()):
@@ -295,6 +306,8 @@ class Center:
                     missing_source = bool(existing.get("sourceFolder")) and not Path(existing["sourceFolder"]).is_dir()
             elif test_id == "windows-accessibility":
                 required += (folder / "uia-initial.json",)
+            elif test_id == "performance-hours":
+                required += (folder / "performance-plan.json",)
             else:
                 required += (root / "evidence/tray.jsonl",)
                 if test_id == "windows-explorer":
@@ -305,7 +318,7 @@ class Center:
                             "verificationNote": "Faltan archivos originales para revalidar."}
                 if known:
                     return self.historical(identity, requested=True)
-                if (test_id in ("windows-explorer", "windows-accessibility") and not existing["hostPid"]
+                if (test_id in ("windows-explorer", "windows-accessibility", "performance-hours") and not existing["hostPid"]
                         and previous.get("status") == "BLOCKED"):
                     return previous  # Earlier catalog placeholders never created an instrumented host.
                 return self.save(folder, existing, "BLOCKED", "Faltan archivos originales del ensayo.",
@@ -318,8 +331,9 @@ class Center:
                 existing.update(data)
                 evidence_key = {"explorer-drop": "sourceFolder", "windows-accessibility": "uiaEvidence"}.get(
                     test_id, "trayTrace")
-                pilot.require(existing.get(evidence_key),
-                              "El recibo no corresponde al tipo de ensayo registrado.")
+                if test_id != "performance-hours":
+                    pilot.require(existing.get(evidence_key),
+                                  "El recibo no corresponde al tipo de ensayo registrado.")
                 attempt = folder / f"verify-{uuid.uuid4().hex}"
                 attempt.mkdir()
                 deadline = time.monotonic() + (timeout or test["timeoutSeconds"])
@@ -352,8 +366,10 @@ class Center:
                 prefix, phases, outcomes = "explorer", ("during", "after"), ("pass", "fail")
             elif test_id == "windows-accessibility" and session.get("uiaEvidence"):
                 prefix, phases, outcomes = "accessibility", ("keyboard", "narrator"), ("pass", "fail", "blocked")
+            elif test_id == "performance-hours" and (folder / "performance-plan.json").is_file():
+                prefix, phases, outcomes = "performance", ("incident", "responsiveness"), ("pass", "fail", "blocked")
             else:
-                raise ValueError("Indica una sesión guiada de convivencia o accesibilidad.")
+                raise ValueError("Indica una sesión guiada que admita observaciones.")
             pilot.require(phase in phases and outcome in outcomes and note and note.strip(),
                           "Indica la fase, el resultado observado y una nota.")
             attempt = folder / f"observe-{uuid.uuid4().hex}"
@@ -374,9 +390,14 @@ class Center:
             return result
 
     def stop(self, identity):
-        session = self.record(self.folder(identity))
+        folder = self.folder(identity)
+        session = self.record(folder)
         pilot.require(session.get("pilotReceipt"), "La sesión no es un host gestionado.")
-        return pilot.stop_session(self.pilot_storage, identity, pilot.powershell())
+        closure = pilot.stop_session(self.pilot_storage, identity, pilot.powershell())
+        if session["testId"] == "performance-hours":
+            pilot.write_json(folder / "performance-closure.json", {**closure, "closedUtc": now(),
+                           "buildId": session["buildId"], "hostPid": session["hostPid"], "sidecarPid": session["sidecarPid"]})
+        return closure
 
     def suite(self, suite_id, timeout=None):
         if suite_id not in self.suites:
@@ -406,7 +427,13 @@ class Center:
         if not descriptor.is_file():
             return {}
         session = pilot.read_json(descriptor)
-        return {**session, **(pilot.read_json(verdict) if verdict.is_file() else {})}
+        row = {**session, **(pilot.read_json(verdict) if verdict.is_file() else {})}
+        if session["testId"] == "performance-hours":
+            for key, name in (("progress", "progress"), ("technicalEnd", "summary"), ("closure", "closure")):
+                path = folder / f"performance-{name}.json"
+                if path.is_file():
+                    row[key] = pilot.read_json(path)
+        return row
 
     def accepted(self, identity):
         return next((row for row in pilot.read_json(ACCEPTED) if row["id"] == identity), None)
@@ -467,6 +494,18 @@ def markdown(rows):
                 lines.append(f"- {label} · {row[key]}")
         for member in (row.get("details") or {}).get("members", []):
             lines.append(f"- {member['testId']} · {member['status']} · `{member['id']}` · {member['reason']}")
+        if progress := row.get("progress"):
+            lines.append(f"- Muestreo · {progress['phase']} · {progress['samples']} muestras · "
+                         f"{progress['measuredSeconds']:g}/{progress['targetSeconds']:g} s de reposo · "
+                         f"última muestra {progress['lastUtc']}")
+        if end := row.get("technicalEnd"):
+            lines.append(f"- Cierre técnico · {end['status']} · {end['reason']}")
+            if summary := end.get("summary"):
+                lines.extend(f"- {metric} · mediana inicial {values['baselineMedian']:.4g} · "
+                             f"variación final {values['finalDelta']:+.4g} · pendiente/h {values['slopePerHour']:+.4g}"
+                             for metric, values in summary["metrics"].items())
+        if closure := row.get("closure"):
+            lines.append(f"- Salida del piloto · {closure['status']} · {closure['observedProcesses']} procesos observados")
     if not rows:
         lines.extend(["", "No hay sesiones para este filtro."])
     return "\n".join(lines) + "\n"
@@ -504,10 +543,15 @@ def main():
     parser.add_argument("--timeout", type=int)
     parser.add_argument("--format", choices=("json", "markdown"), default="markdown")
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--phase", choices=("during", "after", "keyboard", "narrator"))
+    parser.add_argument("--phase", choices=("during", "after", "keyboard", "narrator", "incident", "responsiveness"))
     parser.add_argument("--outcome", choices=("pass", "fail", "blocked"))
     parser.add_argument("--note")
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--long-run", dest="performance_mode", action="store_const", const="long")
+    modes.add_argument("--probe", dest="performance_mode", action="store_const", const="probe")
     args = parser.parse_args()
+    if args.performance_mode and (args.mode != "run" or args.test != "performance-hours" or args.suite):
+        parser.error("--long-run y --probe requieren run --test performance-hours")
     center = Center()
     if args.mode == "menu":
         return menu(center)
@@ -536,7 +580,7 @@ def main():
     if args.mode == "verify":
         result = center.verify(args.session, args.timeout)
     elif args.test:
-        result = center.run(args.test, args.timeout)
+        result = center.run(args.test, args.timeout, performance_mode=args.performance_mode)
     else:
         result = center.suite(args.suite, args.timeout)
     print_json(result)

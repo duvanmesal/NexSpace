@@ -2,6 +2,7 @@
 
 from importlib.util import module_from_spec, spec_from_file_location
 import json
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 import tempfile
 import unittest
@@ -11,6 +12,10 @@ from unittest.mock import patch
 spec = spec_from_file_location("test_center", Path(__file__).resolve().parents[1] / "test-center.py")
 app = module_from_spec(spec)
 spec.loader.exec_module(app)
+performance_spec = spec_from_file_location(
+    "performance_hours", app.REPO / "prototypes/web-shell/bench/Performance-Hours.py")
+performance = module_from_spec(performance_spec)
+performance_spec.loader.exec_module(performance)
 
 
 class TestCenterTests(unittest.TestCase):
@@ -81,6 +86,16 @@ class TestCenterTests(unittest.TestCase):
             result = self.center.run("explorer-drop")
         self.assertEqual(result["status"], "BLOCKED")
         self.assertIn("piloto abierto", result["reason"])
+        command.assert_not_called()
+
+    def test_performance_hours_requires_opt_in(self):
+        with patch.object(self.center, "command") as command:
+            result = self.center.run("performance-hours")
+            automatic = self.center.run("performance-hours", in_suite=True)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("-LongRun", result["reason"])
+        self.assertIsNone(result["hostPid"])
+        self.assertEqual(automatic["status"], "BLOCKED")
         command.assert_not_called()
 
     def test_manual_start_keeps_one_id_and_opens_the_confirmed_source(self):
@@ -171,6 +186,67 @@ class TestCenterTests(unittest.TestCase):
                               "executable": str(root / "host.exe"), "database": str(root / "floating.db")})
         with patch.object(app.pilot, "session_path", return_value=root):
             self.assertEqual(self.center.verify(identity)["status"], "ERROR")
+
+
+class PerformanceSeriesTests(unittest.TestCase):
+    def setUp(self):
+        self.plan = dict(profile="long", binding={"hostPid": 42, "sidecarPid": 43},
+                         timingSeconds=performance.PROFILES["long"])
+
+    def samples(self, value, profile="long"):
+        warmup, duration, interval = performance.PROFILES[profile]
+        start = datetime(2026, 11, 25, tzinfo=UTC)
+        return [
+            dict(binding=self.plan["binding"], utc=(start + timedelta(seconds=elapsed)).isoformat(),
+                 elapsedSeconds=elapsed, hostAlive=True, processCount=2, windows=[11, 12, 13, 14],
+                 processes=[
+                     dict(pid=pid, parent=parent, started="1", private=value(elapsed), ws=500,
+                          handles=45, gdi=10, user=3, cpu=elapsed * 0.02)
+                     for pid, parent in ((42, 30), (43, 42))
+                 ])
+            for elapsed in range(0, warmup + duration + interval, interval)
+        ]
+
+    def test_sustained_growth_differs_from_single_jump(self):
+        growth = performance.series(self.plan, self.samples(lambda elapsed: 100 + elapsed))
+        self.assertEqual(growth["status"], "FAIL")
+        self.assertEqual(growth["metrics"], ["private"])
+        plateau = performance.series(self.plan, self.samples(lambda elapsed: 500 if elapsed > 3000 else 100))
+        self.assertEqual(plateau["status"], "PASS")
+        memory = plateau["summary"]["metrics"]["private"]
+        self.assertEqual(memory["finalDelta"], 800)
+
+    def test_restart_gap_and_early_stop(self):
+        samples = self.samples(lambda _: 500)
+        samples[-1]["processes"][-1]["started"] = "2"
+        self.assertEqual(performance.series(self.plan, samples)["status"], "FAIL")
+        samples[-1]["processes"][-1]["started"] = "1"
+        del samples[30:32]
+        self.assertEqual(performance.series(self.plan, samples)["status"], "BLOCKED")
+        samples = self.samples(lambda _: 500)[:10]
+        samples[-1].update(hostAlive=False, stopRequested=True)
+        self.assertEqual(performance.series(self.plan, samples)["status"], "BLOCKED")
+
+    def test_partial_evidence_and_probe_cannot_pass(self):
+        self.assertEqual(performance.series(self.plan, self.samples(lambda _: 500)[:-1])["status"], "BLOCKED")
+        probe = dict(self.plan, profile="probe", timingSeconds=performance.PROFILES["probe"])
+        result = performance.series(probe, self.samples(lambda _: 500, "probe"))
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("summary", result)
+
+    def test_verify_requires_physical_observation_after_full_run(self):
+        with tempfile.TemporaryDirectory() as path:
+            folder = Path(path)
+            samples = self.samples(lambda _: 500)
+            end = dict(binding=self.plan["binding"], status="PASS", finishedUtc="2026-11-25T04:00:00+00:00")
+            app.pilot.write_json(folder / "performance-summary.json", end)
+            with patch.object(performance, "read_samples", return_value=samples):
+                self.assertEqual(performance.verify(folder, self.plan)["status"], "BLOCKED")
+                attempt = folder / "observe-1"
+                attempt.mkdir()
+                app.pilot.write_json(attempt / "result.json", {"checkpoint": {
+                    "phase": "incident", "binding": self.plan["binding"], "outcome": "fail", "note": "fixture"}})
+                self.assertEqual(performance.verify(folder, self.plan)["status"], "FAIL")
 
 
 if __name__ == "__main__":

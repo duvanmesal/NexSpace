@@ -87,6 +87,37 @@ Usa `-Outcome Pass` cuando completes la fase descrita. Ante un defecto, usa `-Ou
 
 Tras registrar y verificar las fases, puedes dejar Narrador en su estado anterior y cerrar el piloto con `.\tools\NexSpace-Test.ps1 -Stop -Session $id`.
 
+## Reposo prolongado
+
+Usa un build Release vigente y cierra otros pilotos. `-LongRun` autoriza el arranque. La sesión prepara su propia biblioteca SQLite y abre NexDock con tres islas. El banco toma muestras cada minuto durante **15 minutos de calentamiento y 3 horas de reposo**. La ventana de ejecución del comando está dedicada al arranque y la verificación. El colector continúa en segundo plano.
+
+```powershell
+$run = .\tools\NexSpace-Test.ps1 -Test performance-hours -LongRun | ConvertFrom-Json
+$id = $run.id
+$run | Select-Object id, buildId, gitSha, hostPid, sidecarPid, database, evidenceDirectory
+.\tools\NexSpace-Test.ps1 -Report -Session $id
+```
+
+1. Deja visibles NexDock y las tres islas. Mantén el escritorio en la misma sesión, sin suspender el equipo, cambiar pantallas, cambiar perfiles ni abrir popovers durante el muestreo. Si ocurre una incidencia, regístrala con su hora aproximada y el síntoma usando `-Phase Incident` y `-Outcome Fail` si falló el producto o `Blocked` si se interrumpió la observación.
+2. Espera a que el informe muestre **Cierre técnico · PASS**. Abre y cierra un popover desde NexDock. Contrae y expande Archivos, Juegos y Aplicaciones y deja las tres islas expandidas. Comprueba que el dock y cada isla responden. Registra lo que ocurrió con `-Phase Responsiveness`. Usa el mismo ID en cada comando.
+3. Ejecuta `-Verify`. Conserva las muestras y observaciones de ese ID. Cierra el piloto mediante `-Stop` y copia el informe cuando termine el cierre.
+
+```powershell
+# Solo si ocurre una incidencia
+.\tools\NexSpace-Test.ps1 -Observe -Session $id -Phase Incident -Outcome Blocked -Note 'Describe la interrupción observada'
+# Solo si completaste la comprobación física satisfactoriamente
+.\tools\NexSpace-Test.ps1 -Observe -Session $id -Phase Responsiveness -Outcome Pass -Note 'Describe el popover y la respuesta de cada isla'
+.\tools\NexSpace-Test.ps1 -Verify -Session $id
+.\tools\NexSpace-Test.ps1 -Stop -Session $id
+.\tools\NexSpace-Test.ps1 -Report -Session $id -Format Markdown | Out-String | Set-Clipboard
+```
+
+El banco guarda JSONL incremental con UTC y tiempo monotónico, PID y hora de creación, HWND visibles del host y contadores por proceso. La memoria privada y el conjunto de trabajo están en bytes. La suma del conjunto de trabajo puede contar páginas compartidas varias veces. CPU se calcula como incremento de tiempo de CPU del árbol dividido por el intervalo y se expresa como porcentaje de un procesador lógico. Los handles y GDI/USER son recuentos. [Memoria privada](https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.process.privatememorysize64) · [Conjunto de trabajo](https://learn.microsoft.com/en-us/dotnet/api/system.diagnostics.process.workingset64) · [GetGuiResources](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getguiresources)
+
+La línea base es el primer bloque de 30 minutos tras el calentamiento. El informe compara seis medianas por bloque, muestra el cambio final y estima la pendiente por hora. Para marcar crecimiento sostenido, las últimas tres transiciones entre medianas deben subir y la última mediana debe superar el percentil 95 inicial más la amplitud P95–P05. El criterio se aplica a memoria privada, handles, GDI, USER y CPU. El conjunto de trabajo aporta contexto. Este ensayo identifica señales para investigar. Los límites de seguridad de 2 GiB privados o 24.000 handles provienen del banco corto. Si se exceden, el colector termina y el operador puede cerrar el piloto con `-Stop`.
+
+El cierre inesperado del host, la pérdida del sidecar o un cambio de identidad del árbol o de las cuatro ventanas tras calentamiento da **FAIL**. Una brecha superior a dos intervalos, una interrupción del colector, un cierre solicitado antes de tiempo o la falta de confirmación física deja la sesión **BLOCKED** salvo que exista un fallo constatado. Los reinicios se detectan en identidades observadas y las muestras se conservan aunque se interrumpa la prueba. `-Probe` recorre el mismo banco con 12 segundos de calentamiento, 36 de reposo y una muestra cada 3 segundos. Su verificador nunca concede PASS.
+
 ## Informes e historial
 
 ```powershell

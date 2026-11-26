@@ -13,7 +13,7 @@ param(
     [Parameter(Mandatory,ParameterSetName='Stop')]
     [Parameter(Mandatory,ParameterSetName='Observe')]
     [Parameter(ParameterSetName='Report')][string]$Session,
-    [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('During','After','Keyboard','Narrator')][string]$Phase,
+    [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('During','After','Keyboard','Narrator','Incident','Responsiveness')][string]$Phase,
     [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('Pass','Fail','Blocked')][string]$Outcome,
     [Parameter(Mandatory,ParameterSetName='Observe')][string]$Note,
     [Parameter(ParameterSetName='Report')][string]$Build,
@@ -21,6 +21,8 @@ param(
     [Parameter(ParameterSetName='Report')][string]$To,
     [Parameter(ParameterSetName='Report')][ValidateSet('JSON','Markdown')][string]$Format='Markdown',
     [Parameter(ParameterSetName='Report')][string]$Output,
+    [Parameter(ParameterSetName='RunTest')][switch]$LongRun,
+    [Parameter(ParameterSetName='RunTest')][switch]$Probe,
     [Parameter(ParameterSetName='RunTest')]
     [Parameter(ParameterSetName='RunSuite')]
     [Parameter(ParameterSetName='Verify')][ValidateRange(1,14400)][int]$TimeoutSeconds,
@@ -41,6 +43,8 @@ foreach ($option in @{
     if ($option.Value) { $arguments += @($option.Key, [string]$option.Value) }
 }
 if ($Report) { $arguments += @('--format', $Format.ToLowerInvariant()) }
+if ($LongRun) { $arguments += '--long-run' }
+if ($Probe) { $arguments += '--probe' }
 if ($Observe) {
     $arguments += @('--phase', $Phase.ToLowerInvariant(), '--outcome', $Outcome.ToLowerInvariant(), '--note', $Note)
     if ($Outcome -eq 'Pass' -and $Phase -in 'During','After') {

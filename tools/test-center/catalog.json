@@ -513,22 +513,38 @@
     },
     "performance-hours": {
       "name": "Reposo de varias horas",
-      "description": "Evalúa calentamiento y crecimiento de memoria y handles con el uso prolongado.",
+      "description": "Mide el árbol de un piloto aislado durante tres horas de reposo y recoge la observación física al finalizar.",
       "component": "Tauri y NexCore",
       "category": "Rendimiento",
-      "type": "manual",
+      "type": "guiada",
       "platform": "Windows 11 x64",
-      "requirements": ["Ventana de tiempo y topología fija."],
+      "requirements": ["Build Release vigente.", "Escritorio interactivo sin otro piloto abierto.", "Tres horas de reposo tras 15 minutos de calentamiento."],
       "preparation": null,
-      "execution": [],
-      "verification": null,
-      "acceptanceCriteria": ["Muestras comparables durante varias horas e interpretación de tendencias."],
+      "execution": [
+        ["python", "prototypes/web-shell/pilot_support.py", "run", "--id", "{session}"],
+        ["python", "prototypes/web-shell/bench/Performance-Hours.py", "start", "{session}", "{evidence}", "--profile", "{performanceMode}"]
+      ],
+      "verification": ["python", "prototypes/web-shell/bench/Performance-Hours.py", "verify", "{session}", "{evidence}"],
+      "observation": ["python", "prototypes/web-shell/bench/Performance-Hours.py", "observe", "{session}", "{evidence}", "--phase", "{phase}", "--operator", "{operator}"],
+      "acceptanceCriteria": [
+        "Calentamiento y tres horas de reposo con muestras comparables del mismo árbol y cuatro ventanas visibles.",
+        "Tendencias contrastadas con la línea base de la sesión sin crecimiento sostenido según el criterio documentado.",
+        "Respuesta de NexDock y de las islas observada físicamente tras el cierre técnico."
+      ],
       "timeoutSeconds": 90,
       "humanRequired": true,
+      "humanInstructions": [
+        "Deja NexDock y las tres islas visibles mientras corre el muestreo. Consulta -Report con el mismo ID.",
+        "Cuando el cierre técnico muestre PASS, abre y cierra un popover del dock y contrae y expande cada isla.",
+        "Registra lo observado en Responsiveness. Registra cualquier incidencia en Incident y ejecuta -Verify con ese ID."
+      ],
       "evidence": "artifacts/test-center/sessions/{session}",
-      "availability": "NOT_TESTED",
-      "unavailableReason": "Acordar una sesión prolongada antes de declarar estabilidad.",
-      "nextAction": "Acordar una sesión prolongada antes de declarar estabilidad."
+      "availability": "READY",
+      "unavailableReason": null,
+      "nextAction": "Consulta -Report con el ID de la sesión. El ensayo largo requiere -LongRun.",
+      "requiresBuild": true,
+      "requiresIdleDesktop": true,
+      "managed": true
     },
     "legacy-lab": {
       "name": "Contrato y ciclo de vida del laboratorio A/B",
