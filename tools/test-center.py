@@ -316,7 +316,7 @@ class Center:
             files = tuple(checkpoints / name for name in ("performance-plan.json", "performance-summary.json",
                                                           "performance-responsiveness.json", "performance-closure.json"))
         elif session["testId"] == "windows-monitors-100":
-            files = tuple(Path(session["evidenceDirectory"]).glob("monitors-100-*.json"))
+            files = (evidence / "monitors.jsonl", *Path(session["evidenceDirectory"]).glob("monitors-100-*.json"))
         else:
             files = (evidence / "tray.jsonl",)
             if session["testId"] == "windows-explorer":
@@ -462,6 +462,11 @@ class Center:
         elif session["testId"] == "windows-monitors-100":
             pilot.write_json(folder / "monitors-100-closure.json", {**closure, "closedUtc": now(),
                            "buildId": session["buildId"], "hostPid": session["hostPid"], "sidecarPid": session["sidecarPid"]})
+            if session.get("pilotEvidence"):
+                trace = Path(session["pilotEvidence"]) / "monitors.jsonl"
+                archive = folder / trace.name
+                if trace.is_file() and not archive.exists():
+                    shutil.copy2(trace, archive)
         return closure
 
     def suite(self, suite_id, timeout=None):
@@ -503,6 +508,12 @@ class Center:
             row["checkpoints"] = sorted(path.name for path in folder.glob("mixed-dpi-*.json"))
         elif session["testId"] == "windows-monitors-100":
             row["checkpoints"] = sorted(path.name for path in folder.glob("monitors-100-*.json"))
+            if session.get("pilotEvidence"):
+                trace = folder / "monitors.jsonl"
+                if not trace.is_file():
+                    trace = Path(session["pilotEvidence"]) / "monitors.jsonl"
+                if trace.is_file():
+                    row["monitorTrace"] = str(trace)
             closure = folder / "monitors-100-closure.json"
             if closure.is_file():
                 row["closure"] = pilot.read_json(closure)
@@ -584,6 +595,8 @@ def markdown(rows):
             lines.append(f"- Salida del piloto · {closure['status']} · {closure['observedProcesses']} procesos observados")
         for checkpoint in row.get("checkpoints", []):
             lines.append(f"- Evidencia de monitores · {checkpoint}")
+        if trace := row.get("monitorTrace"):
+            lines.append(f"- Traza automática de topología · {trace}")
     if not rows:
         lines.extend(["", "No hay sesiones para este filtro."])
     return "\n".join(lines) + "\n"

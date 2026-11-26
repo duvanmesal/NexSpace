@@ -105,7 +105,7 @@ El arranque comprueba el build y repite el preflight. **BLOCKED** con un PID ind
 
 1. **Baseline.** Localiza NexDock y las islas Archivos, Juegos y Aplicaciones. Comprueba que están accesibles y que Archivos parte de la pantalla principal. Registra el estado inicial.
 2. **Moved.** En **Archivos → ··· → Mover a otra pantalla**, traslada Archivos al secundario. Déjalo allí. El punto registra el nuevo dispositivo y las coordenadas de la ventana y de SQLite.
-3. **Disconnected.** Desconecta físicamente el cable de vídeo del secundario, dejando conectada la principal. Espera a que Windows retire la pantalla y a que NexSpace se estabilice. Comprueba que Archivos y las demás ventanas quedan accesibles en la pantalla restante. Registra el resultado antes de reconectar. Si Windows sigue detectando el monitor, registra `Blocked`.
+3. **Disconnected.** Desconecta físicamente el cable de vídeo del secundario, dejando conectada la principal. Espera unos cinco segundos sin seleccionar NexSpace en la barra de tareas ni usar **Recuperar ventanas**. Comprueba que Archivos aparece en la pantalla restante y registra el resultado antes de intentar una recuperación manual o reconectar. Si Windows sigue detectando el monitor, registra `Blocked`.
 4. **Reconnected.** Reconecta al mismo puerto y espera a que Windows recupere la topología. Observa si Archivos vuelve a su posición guardada. Comprueba las cuatro ventanas y abre y cierra un popover de NexDock. Registra el resultado natural antes de invocar una recuperación manual. Si necesitas **Recuperar ventanas** desde la bandeja, conserva primero el fallo observado.
 
 ```powershell
@@ -120,6 +120,8 @@ El arranque comprueba el build y repite el preflight. **BLOCKED** con un PID ind
 ```
 
 Usa `-Outcome Fail` para un defecto observado y `Blocked` para una comprobación que no pudiste realizar. Confirma `checkpointRecorded: true` antes de pasar al siguiente paso. Cada punto guarda DPI, áreas útiles, HWND, rectángulos, perfil, colocaciones, referencias y hashes de archivos de prueba. Si necesitas repetir una toma, hazlo antes de pasar a la siguiente fase. Test Center conserva cada intento en `observe-*/`.
+
+El piloto guarda también una traza automática en `monitors.jsonl`. Registra la última muestra de la topología anterior, el primer estado que observa al detectar el cambio y el resultado de recolocar las ventanas. Incluye los indicadores nativos de visibilidad y minimización, rectángulos físicos, monitor, primer plano y posiciones del manifiesto. La detección usa el sondeo del host, aproximadamente cada segundo. Mantener el escritorio sin interacción durante la espera permite interpretar la traza anterior a cualquier recuperación manual. `-Report` muestra su ruta y `-Stop` conserva una copia en la carpeta de Test Center. [Estados de ventana de Win32](https://learn.microsoft.com/en-us/windows/win32/winmsg/window-features)
 
 `-Verify` exige cuatro observaciones ordenadas de la misma instancia, topología **2 → 2 → 1 → 2**, ventanas accesibles, coordenadas y referencias íntegras en SQLite y el recibo `monitors-100-closure.json` con `remaining: []`. La revalidación del ID usa la misma evidencia y no inicia un piloto. La prueba `windows-mixed-dpi` conserva su requisito de escalas distintas.
 

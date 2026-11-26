@@ -68,6 +68,99 @@ struct Gesture {
     scale: f64,
 }
 
+type MonitorLayout = Vec<(Option<String>, Rect, f64)>;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SurfaceState {
+    hwnd: usize,
+    monitor: Option<String>,
+    visible: bool,
+    minimized: bool,
+    bounds: [i32; 4],
+    foreground: bool,
+}
+
+struct DisplayChange<'a> {
+    previous: &'a MonitorLayout,
+    current: &'a MonitorLayout,
+    surfaces: &'a HashMap<String, SurfaceState>,
+}
+
+impl DisplayChange<'_> {
+    fn lost(&self, name: &str) -> bool {
+        self.previous.iter().any(|m| m.0.as_deref() == Some(name))
+            && !self.current.iter().any(|m| m.0.as_deref() == Some(name))
+    }
+
+    fn should_reveal(&self, label: &str, hwnd: usize, saved_monitor: &str) -> bool {
+        self.surfaces.get(label).is_some_and(|prior| {
+            prior.hwnd == hwnd
+                && prior.visible
+                && !prior.minimized
+                && (prior.monitor.as_deref().is_some_and(|name| self.lost(name))
+                    || self.lost(saved_monitor))
+        })
+    }
+}
+
+#[cfg(test)]
+mod display_tests {
+    use super::*;
+
+    #[test]
+    fn only_reveals_the_same_previously_visible_surface_on_a_lost_monitor() {
+        let work = Rect::new(0., 0., 800., 600.);
+        let current = vec![(Some("primary".into()), work, 1.0)];
+        let mut previous = current.clone();
+        previous.push((Some("secondary".into()), work, 1.0));
+        let make = |monitor: &str, visible, minimized| SurfaceState {
+            hwnd: 1, monitor: Some(monitor.into()), visible, minimized,
+            bounds: [0, 0, 100, 100], foreground: false,
+        };
+        let surfaces = HashMap::from([
+            ("displaced".into(), make("secondary", true, false)),
+            ("manual-minimized".into(), make("secondary", true, true)),
+            ("hidden".into(), make("secondary", false, false)),
+            ("unaffected".into(), make("primary", true, false)),
+        ]);
+        let lost = DisplayChange { previous: &previous, current: &current, surfaces: &surfaces };
+        assert!(lost.should_reveal("displaced", 1, "secondary"));
+        assert!(!lost.should_reveal("displaced", 2, "secondary"));
+        assert!(!lost.should_reveal("manual-minimized", 1, "secondary"));
+        assert!(!lost.should_reveal("hidden", 1, "secondary"));
+        assert!(!lost.should_reveal("unaffected", 1, "primary"));
+        let restored = DisplayChange { previous: &current, current: &previous, surfaces: &surfaces };
+        assert!(!restored.should_reveal("displaced", 1, "secondary"));
+    }
+}
+
+fn monitor_layout(layout: &MonitorLayout) -> Value {
+    json!(layout.iter().map(|(device, area, scale)| {
+        json!({"device":device,"work":[area.x,area.y,area.x+area.width,area.y+area.height],"scale":scale})
+    }).collect::<Vec<_>>())
+}
+
+fn surface_states(app: &AppHandle) -> HashMap<String, SurfaceState> {
+    let foreground = placement::foreground_handle();
+    app.webview_windows().into_iter().filter_map(|(label, w)| {
+        if label != "dock" && !label.starts_with("group_") {
+            return None;
+        }
+        let hwnd = w.hwnd().ok()?.0 as usize;
+        let (bounds, visible, minimized) = placement::observe_native(hwnd)?;
+        let monitor = w.current_monitor().ok().flatten().and_then(|monitor| monitor.name().cloned());
+        Some((label, SurfaceState {
+            hwnd,
+            monitor,
+            visible,
+            minimized,
+            foreground: hwnd == foreground,
+            bounds,
+        }))
+    }).collect()
+}
+
 fn centered(work: Rect, width: f64, height: f64) -> Rect {
     Rect::new(
         work.x + (work.width - width) / 2.,
@@ -157,12 +250,23 @@ fn dismiss(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 async fn sync(app: &AppHandle, recover: bool) -> Result<Value, String> {
+    reconcile(app, recover, None).await
+}
+
+async fn reconcile(app: &AppHandle, recover: bool, change: Option<&DisplayChange<'_>>) -> Result<Value, String> {
     let state = app.state::<Runtime>();
     let _guard = state.transition.lock().await;
     let data = ipc(app, json!({"op":"manifest"})).await?;
     let profile = ident(&data["profile"])?;
     let groups = data["groups"].as_array().ok_or("invalid-library")?;
     let categories = data["categories"].as_array().ok_or("invalid-library")?;
+    if change.is_some() {
+        trace_displays(app, "display-placement", json!({
+            "profile":profile,"dockMonitor":data["dockMonitor"],
+            "groups":groups.iter().map(|g| json!({"id":g["id"],"name":g["name"],"placement":g["placement"]}))
+                .collect::<Vec<_>>()
+        }));
+    }
     for (label, w) in app.webview_windows() {
         if let Some((kind, p, id)) = scope(&label) {
             let keep = p == profile
@@ -179,7 +283,8 @@ async fn sync(app: &AppHandle, recover: bool) -> Result<Value, String> {
             }
         }
     }
-    let dock_monitor = placement::named(app, data["dockMonitor"].as_str().unwrap_or_default())?;
+    let dock_key = data["dockMonitor"].as_str().unwrap_or_default();
+    let dock_monitor = placement::named(app, dock_key)?;
     let work = placement::area(&dock_monitor);
     let scale = dock_monitor.scale_factor();
     let vertical = data["vertical"] == true;
@@ -202,7 +307,7 @@ async fn sync(app: &AppHandle, recover: bool) -> Result<Value, String> {
     }
     .fit(work);
     if let Some(w) = app.get_webview_window("dock") {
-        place(&w, dock)?;
+        place_for_layout(&w, dock, dock_key, change).await?;
         if recover {
             w.unminimize().map_err(err)?;
             w.show().map_err(err)?;
@@ -226,7 +331,7 @@ async fn sync(app: &AppHandle, recover: bool) -> Result<Value, String> {
             ipc(app,json!({"op":"placement","profile":profile,"target":id,"placement":corrected,"flag":true})).await?;
         }
         if let Some(w) = app.get_webview_window(&label) {
-            place(&w, rect)?;
+            place_for_layout(&w, rect, key, change).await?;
             w.set_title(g["name"].as_str().unwrap_or("NexSpace"))
                 .map_err(err)?;
             if recover {
@@ -243,6 +348,20 @@ async fn sync(app: &AppHandle, recover: bool) -> Result<Value, String> {
     }
     refresh(app);
     Ok(data)
+}
+
+async fn place_for_layout(window: &WebviewWindow, rect: Rect, saved_monitor: &str,
+                          change: Option<&DisplayChange<'_>>) -> Result<(), String> {
+    if let Some(change) = change {
+        let hwnd = window.hwnd().map_err(err)?.0 as usize;
+        // A dock the user hid with Alt+F4 stays hidden.
+        if change.should_reveal(window.label(), hwnd, saved_monitor)
+            && (window.label() != "dock" || window.is_visible().map_err(err)?)
+        {
+            return placement::reveal_displaced(window, rect).await;
+        }
+    }
+    place(window, rect)
 }
 fn authorized(label: &str, r: &Action) -> bool {
     if label == "dock" || label == "organize" {
@@ -388,6 +507,12 @@ fn write_trace(app: &AppHandle, filename: &str, stage: &str, detail: Value) {
                 "session":runtime.managed.as_ref().map(|s| &s.id),"hostPid":std::process::id(),
                 "build":option_env!("NEXSPACE_BUILD_ID").unwrap_or("unversioned")})
         );
+    }
+}
+
+fn trace_displays(app: &AppHandle, stage: &str, detail: Value) {
+    if app.state::<Runtime>().managed.is_some() {
+        write_trace(app, "monitors.jsonl", stage, detail);
     }
 }
 
@@ -746,7 +871,7 @@ fn recover(app: &AppHandle, tray_attempt: Option<u64>) {
     });
 }
 async fn watch_displays(app: AppHandle) {
-    let mut previous = None;
+    let mut previous: Option<(MonitorLayout, HashMap<String, SurfaceState>)> = None;
     loop {
         if app
             .state::<Runtime>()
@@ -769,15 +894,35 @@ async fn watch_displays(app: AppHandle) {
                 })
                 .collect();
             layout.sort_by(|left, right| left.0.cmp(&right.0));
-            if !layout.is_empty() && previous.as_ref().is_some_and(|last| last != &layout) {
-                let _ = dismiss(&app);
-                let _ = sync(&app, false).await;
-            }
             if !layout.is_empty() {
-                previous = Some(layout);
+                if previous.is_none() {
+                    trace_displays(&app, "display-baseline", json!({
+                        "current":monitor_layout(&layout),"windows":surface_states(&app)
+                    }));
+                }
+                if let Some((last, surfaces)) = previous.as_ref().filter(|(last, _)| last != &layout) {
+                    let change = DisplayChange { previous: last, current: &layout, surfaces };
+                    trace_displays(&app, "display-changed", json!({
+                        "previous":monitor_layout(last),"current":monitor_layout(&layout),
+                        "previousWindows":surfaces,"windows":surface_states(&app),
+                        "foregroundHwnd":placement::foreground_handle()
+                    }));
+                    let _ = dismiss(&app);
+                    let result = reconcile(&app, false, Some(&change)).await;
+                    trace_displays(&app, "display-reconciled", json!({
+                        "error":result.as_ref().err(),"current":monitor_layout(&layout),
+                        "windows":surface_states(&app),"foregroundHwnd":placement::foreground_handle()
+                    }));
+                    if result.is_err() {
+                        // A transient manifest or placement error must not consume the change.
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                        continue;
+                    }
+                }
+                previous = Some((layout, surface_states(&app)));
             }
         }
-        tokio::time::sleep(Duration::from_secs(3)).await;
+        tokio::time::sleep(Duration::from_secs(1)).await;
     }
 }
 

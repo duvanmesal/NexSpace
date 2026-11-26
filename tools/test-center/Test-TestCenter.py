@@ -166,14 +166,22 @@ class TestCenterTests(unittest.TestCase):
 
     def test_monitor_reconnect_stop_keeps_a_bound_closure(self):
         folder, session = self.center.session("6" * 32, test="windows-monitors-100")
-        session.update(pilotReceipt="isolated receipt", buildId="build", hostPid=42, sidecarPid=43)
+        evidence = folder / "pilot-evidence"
+        evidence.mkdir()
+        trace = evidence / "monitors.jsonl"
+        trace.write_text('{"stage":"display-changed"}\n', encoding="utf-8")
+        session.update(pilotReceipt="isolated receipt", pilotEvidence=str(evidence), buildId="build", hostPid=42, sidecarPid=43)
         app.pilot.write_json(folder / "session.json", session)
+        self.assertEqual(self.center.record(folder)["monitorTrace"], str(trace))
         closure = {"session": session["id"], "status": "closed", "observedProcesses": 12, "remaining": []}
         with patch.object(app.pilot, "stop_session", return_value=closure):
             self.assertEqual(self.center.stop(session["id"]), closure)
         receipt = app.pilot.read_json(folder / "monitors-100-closure.json")
         self.assertEqual((receipt["buildId"], receipt["hostPid"], receipt["sidecarPid"]), ("build", 42, 43))
         self.assertEqual(self.center.record(folder)["closure"], receipt)
+        archived = folder / trace.name
+        self.assertEqual(archived.read_bytes(), trace.read_bytes())
+        self.assertEqual(self.center.record(folder)["monitorTrace"], str(archived))
 
     def test_resume_prepared_host_keeps_identity(self):
         identity = "4" * 32
