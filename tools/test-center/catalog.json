@@ -589,6 +589,185 @@
       "requiresIdleDesktop": true,
       "managed": true
     },
+    "windows-beta-package": {
+      "name": "Integridad del instalador beta",
+      "description": "Verifica el NSIS generado y los recursos de distribución.",
+      "component": "Distribución",
+      "category": "Beta instalable",
+      "type": "automática",
+      "platform": "Windows 11 x64",
+      "requirements": [
+        "Build de Build-Pilot.ps1 -Beta correspondiente al código actual."
+      ],
+      "preparation": null,
+      "execution": [
+        [
+          "python",
+          "prototypes/web-shell/bench/Test-WindowsBeta.py",
+          "package",
+          "--output",
+          "{evidence}",
+          "--adapter",
+          "{metadata}"
+        ]
+      ],
+      "verification": null,
+      "acceptanceCriteria": [
+        "SHA-256, inventario de recursos, identidad, icono y NexCore autocontenido."
+      ],
+      "timeoutSeconds": 180,
+      "humanRequired": false,
+      "evidence": "artifacts/test-center/sessions/{session}",
+      "availability": "READY",
+      "unavailableReason": null,
+      "blockedExitCodes": [
+        2
+      ],
+      "nextAction": "Consultar windows-beta.json y la guía BETA_WINDOWS.md."
+    },
+    "windows-beta-first-run": {
+      "name": "Primer inicio del payload beta",
+      "description": "Ejecuta el payload en una carpeta temporal sin instalarlo.",
+      "component": "Distribución",
+      "category": "Beta instalable",
+      "type": "automática",
+      "platform": "Windows 11 x64",
+      "requirements": [
+        "Build de Build-Pilot.ps1 -Beta correspondiente al código actual."
+      ],
+      "preparation": null,
+      "execution": [
+        [
+          "python",
+          "prototypes/web-shell/bench/Test-WindowsBeta.py",
+          "first-run",
+          "--output",
+          "{evidence}",
+          "--adapter",
+          "{metadata}"
+        ]
+      ],
+      "verification": null,
+      "acceptanceCriteria": [
+        "NexDock y tres islas, SQLite vacío de referencias, exclusión de segunda instancia y cierre limpio."
+      ],
+      "timeoutSeconds": 180,
+      "humanRequired": false,
+      "evidence": "artifacts/test-center/sessions/{session}",
+      "availability": "READY",
+      "unavailableReason": null,
+      "blockedExitCodes": [
+        2
+      ],
+      "requiresIdleDesktop": true,
+      "nextAction": "Consultar windows-beta.json y la guía BETA_WINDOWS.md."
+    },
+    "windows-beta-persistence": {
+      "name": "Persistencia y migraciones de la beta",
+      "description": "Escribe mediante NexCore, reinicia y migra una biblioteca aislada.",
+      "component": "Distribución",
+      "category": "Beta instalable",
+      "type": "automática",
+      "platform": "Windows 11 x64",
+      "requirements": [
+        "Build de Build-Pilot.ps1 -Beta correspondiente al código actual."
+      ],
+      "preparation": null,
+      "execution": [
+        [
+          "python",
+          "prototypes/web-shell/bench/Test-WindowsBeta.py",
+          "persistence",
+          "--output",
+          "{evidence}",
+          "--adapter",
+          "{metadata}"
+        ]
+      ],
+      "verification": null,
+      "acceptanceCriteria": [
+        "Perfil, estado de isla y referencia persistidos. Respaldo v2, esquema v3 íntegro y rechazo de un esquema futuro."
+      ],
+      "timeoutSeconds": 180,
+      "humanRequired": false,
+      "evidence": "artifacts/test-center/sessions/{session}",
+      "availability": "READY",
+      "unavailableReason": null,
+      "blockedExitCodes": [
+        2
+      ],
+      "requiresIdleDesktop": true,
+      "nextAction": "Consultar windows-beta.json y la guía BETA_WINDOWS.md."
+    },
+    "windows-beta-install": {
+      "name": "Instalación y primer inicio en Windows",
+      "description": "Instalación por usuario, acceso desde Inicio, NexCore y rutas de usuario.",
+      "component": "Distribución",
+      "category": "Beta instalable",
+      "type": "manual",
+      "platform": "Windows 11 x64",
+      "requirements": [
+        "Requiere Windows aislado o autorización explícita para instalar."
+      ],
+      "preparation": null,
+      "execution": [],
+      "verification": null,
+      "acceptanceCriteria": [
+        "Instalación por usuario, acceso desde Inicio, NexCore y rutas de usuario."
+      ],
+      "timeoutSeconds": 180,
+      "humanRequired": true,
+      "evidence": "artifacts/test-center/sessions/{session}",
+      "availability": "NOT_TESTED",
+      "unavailableReason": "Requiere Windows aislado o autorización explícita para instalar.",
+      "nextAction": "Seguir el registro de aceptación física en prototypes/web-shell/BETA_WINDOWS.md."
+    },
+    "windows-beta-upgrade": {
+      "name": "Actualización de una beta instalada",
+      "description": "La versión siguiente reemplaza binarios y conserva la biblioteca de la instalación anterior.",
+      "component": "Distribución",
+      "category": "Beta instalable",
+      "type": "manual",
+      "platform": "Windows 11 x64",
+      "requirements": [
+        "Requiere dos instaladores versionados y un Windows autorizado."
+      ],
+      "preparation": null,
+      "execution": [],
+      "verification": null,
+      "acceptanceCriteria": [
+        "La versión siguiente reemplaza binarios y conserva la biblioteca de la instalación anterior."
+      ],
+      "timeoutSeconds": 180,
+      "humanRequired": true,
+      "evidence": "artifacts/test-center/sessions/{session}",
+      "availability": "NOT_TESTED",
+      "unavailableReason": "Requiere dos instaladores versionados y un Windows autorizado.",
+      "nextAction": "Seguir el registro de aceptación física en prototypes/web-shell/BETA_WINDOWS.md."
+    },
+    "windows-beta-uninstall": {
+      "name": "Desinstalación y reinstalación",
+      "description": "Cierre limpio, eliminación de binarios y accesos. Los datos sobreviven con la opción predeterminada.",
+      "component": "Distribución",
+      "category": "Beta instalable",
+      "type": "manual",
+      "platform": "Windows 11 x64",
+      "requirements": [
+        "Requiere una beta instalada en Windows aislado o autorizado."
+      ],
+      "preparation": null,
+      "execution": [],
+      "verification": null,
+      "acceptanceCriteria": [
+        "Cierre limpio, eliminación de binarios y accesos. Los datos sobreviven con la opción predeterminada."
+      ],
+      "timeoutSeconds": 180,
+      "humanRequired": true,
+      "evidence": "artifacts/test-center/sessions/{session}",
+      "availability": "NOT_TESTED",
+      "unavailableReason": "Requiere una beta instalada en Windows aislado o autorizado.",
+      "nextAction": "Seguir el registro de aceptación física en prototypes/web-shell/BETA_WINDOWS.md."
+    },
     "legacy-lab": {
       "name": "Contrato y ciclo de vida del laboratorio A/B",
       "description": "Inventario de los bancos originales de IPC, recuperación WebView y estrés que usan el layout histórico B.",
