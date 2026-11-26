@@ -271,8 +271,8 @@ def launch_gate(storage):
 
 
 def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, open_explorer=True, *,
-           identity=None, tray=False, explorer=False):
-    require(sum((drop, tray, explorer)) <= 1 and not ((tray or explorer) and allow_parallel),
+           identity=None, tray=False, explorer=False, accessibility=False):
+    require(sum((drop, tray, explorer, accessibility)) <= 1 and not ((tray or explorer or accessibility) and allow_parallel),
             "El ensayo físico requiere un modo y una instancia exclusivos.")
     shell = powershell(shell)
     with launch_gate(storage):
@@ -299,7 +299,7 @@ def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, ope
             env["NEXSPACE_FLOATING_TRAY_TRACE"] = "1"
         prepare = [build / "core" / CORE, "--prepare-floating"]
         if demo:
-            require(not (drop or tray or explorer), "El ensayo físico usa su propia biblioteca de demostración.")
+            require(not (drop or tray or explorer or accessibility), "El ensayo físico usa su propia biblioteca de demostración.")
             prepare.append(demo.resolve(strict=True))
         subprocess.run(prepare, env=env, check=True, timeout=20, creationflags=subprocess.CREATE_NO_WINDOW)
         folder = fixtures(root, shell, identity) if drop else None
@@ -323,6 +323,8 @@ def launch(storage, demo=None, drop=False, allow_parallel=False, shell=None, ope
                        database=str(root / "floating.db"), evidence=str(evidence), process=pid_key(owner))
         if tray or explorer:
             receipt["trial"] = "windows-explorer" if explorer else "windows-tray"
+        if accessibility:
+            receipt["trial"] = "windows-accessibility"
         index = receipt_path(storage, identity)
         index.parent.mkdir(parents=True, exist_ok=True)
         write_json(index, receipt)
@@ -405,6 +407,7 @@ def main():
     trial.add_argument("--drop", action="store_true")
     trial.add_argument("--tray", action="store_true")
     trial.add_argument("--explorer", action="store_true")
+    trial.add_argument("--accessibility", action="store_true")
     run.add_argument("--allow-parallel", action="store_true")
     run.add_argument("--no-explorer", action="store_true")
     run.add_argument("--powershell")
@@ -427,7 +430,7 @@ def main():
     else:
         if args.command == "run":
             result = launch(STORAGE, args.demo, args.drop, args.allow_parallel, args.powershell, not args.no_explorer,
-                            identity=args.id, tray=args.tray, explorer=args.explorer)
+                            identity=args.id, tray=args.tray, explorer=args.explorer, accessibility=args.accessibility)
         else:
             action = show_status if args.command == "status" else stop_session
             result = action(STORAGE, args.session, powershell(args.powershell))

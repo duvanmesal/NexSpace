@@ -18,6 +18,10 @@ tray_spec.loader.exec_module(tray)
 explorer_spec = importlib.util.spec_from_file_location("explorer_test_driver", Path(__file__).with_name("Explorer-Coexistence.py"))
 explorer = importlib.util.module_from_spec(explorer_spec)
 explorer_spec.loader.exec_module(explorer)
+accessibility_spec = importlib.util.spec_from_file_location(
+    "accessibility_test_driver", Path(__file__).with_name("Accessibility-Trial.py"))
+accessibility = importlib.util.module_from_spec(accessibility_spec)
+accessibility_spec.loader.exec_module(accessibility)
 import pilot_support as pilot
 
 
@@ -226,6 +230,48 @@ class ExplorerVerdictTests(unittest.TestCase):
                          "FAIL")
         after = {**self.after, "remaining": [[55, "18"]]}
         self.assertEqual(explorer.verdict(self.binding, self.initial, self.during, after, [self.quit], True)[0], "FAIL")
+
+
+class AccessibilityVerdictTests(unittest.TestCase):
+    """Exercise the verifier in memory without recording human observations."""
+
+    @staticmethod
+    def window(name, hwnd, *buttons):
+        return dict(name=name, hwnd=hwnd, role="ControlType.Window",
+                    controls=[dict(name=button, role="ControlType.Button", focusable=True) for button in buttons])
+
+    def setUp(self):
+        self.binding = dict(session="trial", hostPid=25, started="123", sidecarPid=26, buildId="build", gitSha="sha")
+        island = self.window("Juegos", 1, "Opciones", "Contraer", "Controles.txt")
+        dock = self.window("NexDock", 2, "Organizar espacio y perfiles", "Juegos")
+        popover = self.window("Juegos", 3, "Opciones", "Cerrar categoría", "Controles.txt")
+        self.initial = dict(self.binding, native={"windows": [island, dock]})
+        self.keyboard = dict(self.binding, phase="keyboard", operator={"outcome": "pass", "note": "test"},
+                             native={"windows": [island, dock, popover], "narratorPids": []})
+        self.narrator = dict(self.binding, phase="narrator", operator={"outcome": "pass", "note": "test"},
+                             native={"windows": [island, dock, popover], "narratorPids": [80]})
+
+    def test_needs_both_human_checkpoints_and_narrator(self):
+        check = lambda observations: accessibility.verdict(self.binding, self.initial, observations)[0]
+        self.assertEqual(check({}), "BLOCKED")
+        self.assertEqual(check({"keyboard": self.keyboard}), "BLOCKED")
+        self.assertEqual(check({"keyboard": self.keyboard, "narrator": self.narrator}), "PASS")
+        narrator = {**self.narrator, "native": {**self.narrator["native"], "narratorPids": []}}
+        self.assertEqual(check({"keyboard": self.keyboard, "narrator": narrator}), "BLOCKED")
+
+    def test_reports_missing_name_and_operator_failure(self):
+        wrong = self.window("NexDock", 2, "Organizar espacio y perfiles")
+        initial = {**self.initial, "native": {"windows": [self.initial["native"]["windows"][0], wrong]}}
+        status, _, findings = accessibility.verdict(self.binding, initial, {})
+        self.assertEqual(status, "FAIL")
+        self.assertTrue(any("Juegos" in finding for finding in findings))
+        observed = {**self.keyboard, "operator": {"outcome": "fail", "note": "reported focus issue"}}
+        self.assertEqual(accessibility.verdict(self.binding, self.initial, {"keyboard": observed})[0], "FAIL")
+
+    def test_rejects_observation_from_another_build(self):
+        changed = {**self.narrator, "buildId": "another-build"}
+        result = accessibility.verdict(self.binding, self.initial, {"keyboard": self.keyboard, "narrator": changed})
+        self.assertEqual(result[0], "ERROR")
 
 
 if __name__ == "__main__":

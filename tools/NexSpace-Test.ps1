@@ -13,8 +13,8 @@ param(
     [Parameter(Mandatory,ParameterSetName='Stop')]
     [Parameter(Mandatory,ParameterSetName='Observe')]
     [Parameter(ParameterSetName='Report')][string]$Session,
-    [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('During','After')][string]$Phase,
-    [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('Pass','Fail')][string]$Outcome,
+    [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('During','After','Keyboard','Narrator')][string]$Phase,
+    [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('Pass','Fail','Blocked')][string]$Outcome,
     [Parameter(Mandatory,ParameterSetName='Observe')][string]$Note,
     [Parameter(ParameterSetName='Report')][string]$Build,
     [Parameter(ParameterSetName='Report')][string]$From,
@@ -43,7 +43,7 @@ foreach ($option in @{
 if ($Report) { $arguments += @('--format', $Format.ToLowerInvariant()) }
 if ($Observe) {
     $arguments += @('--phase', $Phase.ToLowerInvariant(), '--outcome', $Outcome.ToLowerInvariant(), '--note', $Note)
-    if ($Outcome -eq 'Pass') {
+    if ($Outcome -eq 'Pass' -and $Phase -in 'During','After') {
         Write-Host 'Tienes 20 segundos para enfocar la carpeta del ensayo en Explorer y dejar el puntero dentro.'
     }
 }

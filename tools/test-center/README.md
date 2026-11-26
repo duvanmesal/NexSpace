@@ -64,6 +64,29 @@ $ensayo.details.instructions
 
 Los puntos de control separan lo que observó la persona de lo que observó Windows. El verificador exige el mismo escritorio de Explorer desde antes de abrir el piloto y la misma ventana de documentos en ambos puntos de control. También comprueba el foco, la ventana bajo el puntero en el punto muestreado, el cierre desde el menú nativo, el fin de los procesos observados y los hashes de los archivos aislados. La aceptación cubre el recorrido físico realizado. [Identidad del escritorio](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getshellwindow) · [Ventana bajo un punto](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-windowfrompoint) · [Ventanas de Explorer](https://learn.microsoft.com/en-us/windows/win32/shell/shell-windows)
 
+## Teclado, UI Automation y Narrador
+
+Abre el ensayo con `.\tools\NexSpace-Test.ps1 -Test windows-accessibility`. El piloto abre una biblioteca aislada y guarda una primera captura de UI Automation en la sesión. Los PASS históricos de la matriz conservan el alcance del build en el que se observaron.
+
+1. Activa **NexDock** con **Alt+Tab** o con un clic en un espacio libre de la barra. Desde ahí, usa **Tab** y **Shift+Tab** para recorrer **Organizar espacio y perfiles**, **Archivos**, **Juegos** y **Aplicaciones**. Comprueba que el foco distingue un solo control, se mueve en ambas direcciones y no salta elementos.
+2. Con **Juegos** enfocado, pulsa **Enter**. Debe abrirse su popover. Usa Tab para llegar a **Opciones** y pulsa **Espacio**. Debe aparecer el menú con foco en una opción. Pulsa **Escape** y comprueba que vuelve a Opciones.
+3. Enfoca **Controles.txt** con Tab o Shift+Tab. Pulsa **Shift+F10**. Debe abrirse el menú de la referencia, con opciones como **Renombrar**. Pulsa Escape y comprueba que vuelve a Controles.txt. Con ambos menús cerrados, pulsa Escape otra vez. El popover debe cerrarse y el foco debe volver al botón **Juegos** del dock. Repite la comprobación del menú contextual en la isla flotante **Juegos** y verifica el foco sobre la misma referencia.
+4. Reabre el popover **Juegos** y deja sus menús cerrados. Vuelve a PowerShell para registrar `Keyboard`. Describe los resultados de Tab, Shift+Tab, el indicador de foco, Enter, Espacio, Shift+F10 y los retornos de Escape.
+5. Activa Narrador con **Windows+Ctrl+Enter**. Repite el recorrido por el dock, la isla Juegos y su popover. Escucha el nombre, el rol y el estado cuando corresponda en **Juegos** del dock, **Opciones**, **Cerrar categoría** y **Controles.txt**. Si quieres cotejar palabras concretas, usa **Narrador+Alt+X** para ver el resumen de voz y anota solo frases del piloto. Mantén Narrador activo y deja el popover abierto, con los menús cerrados, mientras registras `Narrator`. [Atajos de Narrador](https://support.microsoft.com/es-es/accessibility/windows/narrator/appendix-b-narrator-keyboard-commands-and-touch-gestures)
+
+La isla y el popover tienen el mismo título accesible **Juegos**. UI Automation los enumera como ventanas separadas y el botón **Cerrar categoría** identifica el popover. Registra si el título repetido te impide distinguirlos con Narrador.
+
+```powershell
+$id = 'ID DE LA SESIÓN'
+.\tools\NexSpace-Test.ps1 -Observe -Session $id -Phase Keyboard -Outcome Pass -Note 'Describe los controles, teclas y retornos de foco observados'
+.\tools\NexSpace-Test.ps1 -Observe -Session $id -Phase Narrator -Outcome Pass -Note 'Anota los nombres, roles o estados que anunció Narrador'
+.\tools\NexSpace-Test.ps1 -Verify -Session $id
+```
+
+Usa `-Outcome Pass` cuando completes la fase descrita. Ante un defecto, usa `-Outcome Fail` y anota el control, la tecla o el anuncio y el resultado esperado. Si falta un requisito, usa `-Outcome Blocked` y explica cuál. Una observación guardada muestra `checkpointRecorded: true`. El verificador exige las dos observaciones y las capturas nativas asociadas al mismo build y sesión. La detección del proceso Narrador comprueba que estaba activo en la sesión de Windows durante la captura. Tus notas aportan lo que se vio y escuchó. Conserva las evidencias en la carpeta privada de la sesión.
+
+Tras registrar y verificar las fases, puedes dejar Narrador en su estado anterior y cerrar el piloto con `.\tools\NexSpace-Test.ps1 -Stop -Session $id`.
+
 ## Informes e historial
 
 ```powershell

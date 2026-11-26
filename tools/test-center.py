@@ -135,6 +135,8 @@ class Center:
             data["trayTrace"] = str(root / "evidence/tray.jsonl")
         if receipt.get("trial") == "windows-explorer":
             data["sourceFolder"] = str(pilot.explorer_folder(root, identity))
+        if receipt.get("trial") == "windows-accessibility":
+            data["uiaEvidence"] = str(self.folder(identity) / "uia-initial.json")
         manifest = Path(receipt["executable"]).parent / "build.json"
         if manifest.is_file():
             build = pilot.read_json(manifest)
@@ -249,6 +251,10 @@ class Center:
         if session["testId"] == "explorer-drop":
             files = (root / "before.json", root / "drop-trial.json", evidence / "core.log",
                      evidence / "drop.jsonl", evidence / "drop-verdict.json")
+        elif session["testId"] == "windows-accessibility":
+            checkpoints = Path(session["evidenceDirectory"])
+            files = (checkpoints / "uia-initial.json", checkpoints / "accessibility-keyboard.json",
+                     checkpoints / "accessibility-narrator.json")
         else:
             files = (evidence / "tray.jsonl",)
             if session["testId"] == "windows-explorer":
@@ -270,7 +276,7 @@ class Center:
         test_id = existing["testId"] if existing else "explorer-drop"
         if not existing and receipt.is_file():
             test_id = pilot.read_json(receipt).get("trial") or test_id
-        if test_id not in ("explorer-drop", "windows-tray", "windows-explorer"):
+        if test_id not in ("explorer-drop", "windows-tray", "windows-explorer", "windows-accessibility"):
             raise ValueError("La sesión no admite verificación diferida.")
         if not existing:
             if not receipt.is_file() or (known and not (root / "floating.db").is_file()):
@@ -287,6 +293,8 @@ class Center:
                 if previous.get("status") == "PASS" or known:
                     required += (root / "evidence/drop.jsonl", root / "evidence/core.log")
                     missing_source = bool(existing.get("sourceFolder")) and not Path(existing["sourceFolder"]).is_dir()
+            elif test_id == "windows-accessibility":
+                required += (folder / "uia-initial.json",)
             else:
                 required += (root / "evidence/tray.jsonl",)
                 if test_id == "windows-explorer":
@@ -297,7 +305,8 @@ class Center:
                             "verificationNote": "Faltan archivos originales para revalidar."}
                 if known:
                     return self.historical(identity, requested=True)
-                if test_id == "windows-explorer" and not existing["hostPid"] and previous.get("status") == "BLOCKED":
+                if (test_id in ("windows-explorer", "windows-accessibility") and not existing["hostPid"]
+                        and previous.get("status") == "BLOCKED"):
                     return previous  # Earlier catalog placeholders never created an instrumented host.
                 return self.save(folder, existing, "BLOCKED", "Faltan archivos originales del ensayo.",
                                  action=test["nextAction"])
@@ -307,7 +316,9 @@ class Center:
                     if existing[key] is not None:
                         pilot.require(existing[key] == data.get(key), f"La identidad de sesión cambió: {key}.")
                 existing.update(data)
-                pilot.require(existing.get("trayTrace") if test_id != "explorer-drop" else existing["sourceFolder"],
+                evidence_key = {"explorer-drop": "sourceFolder", "windows-accessibility": "uiaEvidence"}.get(
+                    test_id, "trayTrace")
+                pilot.require(existing.get(evidence_key),
                               "El recibo no corresponde al tipo de ensayo registrado.")
                 attempt = folder / f"verify-{uuid.uuid4().hex}"
                 attempt.mkdir()
@@ -336,23 +347,28 @@ class Center:
         folder = self.folder(identity)
         with pilot.launch_gate(folder):
             session = self.record(folder)
-            pilot.require(session.get("testId") == "windows-explorer" and session.get("trayTrace"),
-                          "Indica una sesión instrumentada de windows-explorer.")
-            pilot.require(phase in ("during", "after") and outcome in ("pass", "fail") and note and note.strip(),
+            test_id = session.get("testId")
+            if test_id == "windows-explorer" and session.get("trayTrace"):
+                prefix, phases, outcomes = "explorer", ("during", "after"), ("pass", "fail")
+            elif test_id == "windows-accessibility" and session.get("uiaEvidence"):
+                prefix, phases, outcomes = "accessibility", ("keyboard", "narrator"), ("pass", "fail", "blocked")
+            else:
+                raise ValueError("Indica una sesión guiada de convivencia o accesibilidad.")
+            pilot.require(phase in phases and outcome in outcomes and note and note.strip(),
                           "Indica la fase, el resultado observado y una nota.")
             attempt = folder / f"observe-{uuid.uuid4().hex}"
             attempt.mkdir()
             operator_file = attempt / "operator.json"
             pilot.write_json(operator_file, {"outcome": outcome, "note": note.strip()})
-            command = self.tests["windows-explorer"]["observation"]
+            command = self.tests[test_id]["observation"]
             tokens = {"{session}": identity, "{evidence}": folder, "{phase}": phase, "{operator}": operator_file}
             code, output, reason = self.command(command, tokens, attempt, "observe", time.monotonic() + 50)
             if code == CODES["ERROR"]:
-                raise RuntimeError(reason or "No se pudo tomar el punto de control de Explorer.")
+                raise RuntimeError(reason or "No se pudo tomar el punto de control.")
             result = pilot.read_json(output)
             pilot.require(CODES.get(result["status"]) == code, "El resultado del punto de control es incoherente.")
             if "checkpoint" in result:
-                pilot.write_json(folder / f"explorer-{phase}.json", result["checkpoint"])
+                pilot.write_json(folder / f"{prefix}-{phase}.json", result["checkpoint"])
             result.update(session=identity, phase=phase, checkpointRecorded="checkpoint" in result)
             pilot.write_json(attempt / "result.json", result)
             return result
@@ -488,8 +504,8 @@ def main():
     parser.add_argument("--timeout", type=int)
     parser.add_argument("--format", choices=("json", "markdown"), default="markdown")
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--phase", choices=("during", "after"))
-    parser.add_argument("--outcome", choices=("pass", "fail"))
+    parser.add_argument("--phase", choices=("during", "after", "keyboard", "narrator"))
+    parser.add_argument("--outcome", choices=("pass", "fail", "blocked"))
     parser.add_argument("--note")
     args = parser.parse_args()
     center = Center()
