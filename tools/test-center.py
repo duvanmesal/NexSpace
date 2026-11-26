@@ -192,7 +192,8 @@ class Center:
         values = {"{session}": identity, "{evidence}": folder, "{metadata}": folder / "adapter.json",
                   "{python}": sys.executable, "{performanceMode}": performance_mode,
                   "{preflight}": folder / "performance-preflight.json",
-                  "{mixedDpiPreflight}": folder / "mixed-dpi-preflight.json"}
+                  "{mixedDpiPreflight}": folder / "mixed-dpi-preflight.json",
+                  "{monitors100Preflight}": folder / "monitors-100-preflight.json"}
         deadline = time.monotonic() + (timeout or test["timeoutSeconds"])
         try:
             if test.get("requiresBuild"):
@@ -221,6 +222,9 @@ class Center:
                     if code:
                         if test_id == "windows-mixed-dpi" and values["{mixedDpiPreflight}"].is_file():
                             detail = pilot.read_json(values["{mixedDpiPreflight}"])
+                            return result("BLOCKED", detail["reason"], details=detail)
+                        if test_id == "windows-monitors-100" and values["{monitors100Preflight}"].is_file():
+                            detail = pilot.read_json(values["{monitors100Preflight}"])
                             return result("BLOCKED", detail["reason"], details=detail)
                         preflight = values["{preflight}"]
                         if test_id == "performance-hours" and preflight.is_file():
@@ -311,6 +315,8 @@ class Center:
             checkpoints = Path(session["evidenceDirectory"])
             files = tuple(checkpoints / name for name in ("performance-plan.json", "performance-summary.json",
                                                           "performance-responsiveness.json", "performance-closure.json"))
+        elif session["testId"] == "windows-monitors-100":
+            files = tuple(Path(session["evidenceDirectory"]).glob("monitors-100-*.json"))
         else:
             files = (evidence / "tray.jsonl",)
             if session["testId"] == "windows-explorer":
@@ -332,7 +338,8 @@ class Center:
         test_id = existing["testId"] if existing else "explorer-drop"
         if not existing and receipt.is_file():
             test_id = pilot.read_json(receipt).get("trial") or test_id
-        if test_id not in ("explorer-drop", "windows-tray", "windows-explorer", "windows-accessibility", "performance-hours"):
+        if test_id not in ("explorer-drop", "windows-tray", "windows-explorer", "windows-accessibility",
+                           "performance-hours", "windows-monitors-100"):
             raise ValueError("La sesión no admite verificación diferida.")
         if not existing:
             if not receipt.is_file() or (known and not (root / "floating.db").is_file()):
@@ -355,6 +362,8 @@ class Center:
                 if not (folder / "performance-plan.json").is_file() and previous.get("status") == "BLOCKED":
                     return previous
                 required += (folder / "performance-plan.json",)
+            elif test_id == "windows-monitors-100":
+                required += (folder / "monitors-100-preflight.json",)
             else:
                 required += (root / "evidence/tray.jsonl",)
                 if test_id == "windows-explorer":
@@ -365,7 +374,8 @@ class Center:
                             "verificationNote": "Faltan archivos originales para revalidar."}
                 if known:
                     return self.historical(identity, requested=True)
-                if (test_id in ("windows-explorer", "windows-accessibility", "performance-hours") and not existing["hostPid"]
+                if (test_id in ("windows-explorer", "windows-accessibility", "performance-hours", "windows-monitors-100")
+                        and not existing["hostPid"]
                         and previous.get("status") == "BLOCKED"):
                     return previous  # Earlier catalog placeholders never created an instrumented host.
                 return self.save(folder, existing, "BLOCKED", "Faltan archivos originales del ensayo.",
@@ -378,7 +388,7 @@ class Center:
                 existing.update(data)
                 evidence_key = {"explorer-drop": "sourceFolder", "windows-accessibility": "uiaEvidence"}.get(
                     test_id, "trayTrace")
-                if test_id != "performance-hours":
+                if test_id not in ("performance-hours", "windows-monitors-100"):
                     pilot.require(existing.get(evidence_key),
                                   "El recibo no corresponde al tipo de ensayo registrado.")
                 attempt = folder / f"verify-{uuid.uuid4().hex}"
@@ -415,6 +425,9 @@ class Center:
                 prefix, phases, outcomes = "accessibility", ("keyboard", "narrator"), ("pass", "fail", "blocked")
             elif test_id == "performance-hours" and (folder / "performance-plan.json").is_file():
                 prefix, phases, outcomes = "performance", ("incident", "responsiveness"), ("pass", "fail", "blocked")
+            elif test_id == "windows-monitors-100" and session.get("pilotReceipt"):
+                prefix, phases, outcomes = "monitors-100", ("baseline", "moved", "disconnected", "reconnected"), (
+                    "pass", "fail", "blocked")
             else:
                 raise ValueError("Indica una sesión guiada que admita observaciones.")
             pilot.require(phase in phases and outcome in outcomes and note and note.strip(),
@@ -446,6 +459,9 @@ class Center:
                            "buildId": session["buildId"], "hostPid": session["hostPid"], "sidecarPid": session["sidecarPid"]})
         elif session["testId"] == "windows-mixed-dpi":
             pilot.write_json(folder / "mixed-dpi-closure.json", {**closure, "closedUtc": now(), "buildId": session["buildId"]})
+        elif session["testId"] == "windows-monitors-100":
+            pilot.write_json(folder / "monitors-100-closure.json", {**closure, "closedUtc": now(),
+                           "buildId": session["buildId"], "hostPid": session["hostPid"], "sidecarPid": session["sidecarPid"]})
         return closure
 
     def suite(self, suite_id, timeout=None):
@@ -485,6 +501,11 @@ class Center:
                     row[key] = pilot.read_json(path)
         elif session["testId"] == "windows-mixed-dpi":
             row["checkpoints"] = sorted(path.name for path in folder.glob("mixed-dpi-*.json"))
+        elif session["testId"] == "windows-monitors-100":
+            row["checkpoints"] = sorted(path.name for path in folder.glob("monitors-100-*.json"))
+            closure = folder / "monitors-100-closure.json"
+            if closure.is_file():
+                row["closure"] = pilot.read_json(closure)
         return row
 
     def accepted(self, identity):
@@ -562,7 +583,7 @@ def markdown(rows):
         if closure := row.get("closure"):
             lines.append(f"- Salida del piloto · {closure['status']} · {closure['observedProcesses']} procesos observados")
         for checkpoint in row.get("checkpoints", []):
-            lines.append(f"- Evidencia de DPI mixto · {checkpoint}")
+            lines.append(f"- Evidencia de monitores · {checkpoint}")
     if not rows:
         lines.extend(["", "No hay sesiones para este filtro."])
     return "\n".join(lines) + "\n"
@@ -600,7 +621,8 @@ def main():
     parser.add_argument("--timeout", type=int)
     parser.add_argument("--format", choices=("json", "markdown"), default="markdown")
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--phase", choices=("during", "after", "keyboard", "narrator", "incident", "responsiveness"))
+    parser.add_argument("--phase", choices=("during", "after", "keyboard", "narrator", "incident", "responsiveness",
+                                            "baseline", "moved", "disconnected", "reconnected"))
     parser.add_argument("--outcome", choices=("pass", "fail", "blocked"))
     parser.add_argument("--note")
     modes = parser.add_mutually_exclusive_group()

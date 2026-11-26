@@ -16,6 +16,10 @@ performance_spec = spec_from_file_location(
     "performance_hours", app.REPO / "prototypes/web-shell/bench/Performance-Hours.py")
 performance = module_from_spec(performance_spec)
 performance_spec.loader.exec_module(performance)
+monitors_spec = spec_from_file_location(
+    "monitor_probes", app.REPO / "prototypes/web-shell/bench/Mixed-Dpi.py")
+monitors = module_from_spec(monitors_spec)
+monitors_spec.loader.exec_module(monitors)
 
 
 class TestCenterTests(unittest.TestCase):
@@ -152,6 +156,24 @@ class TestCenterTests(unittest.TestCase):
         self.assertEqual(result["details"], measured)
         self.assertIsNone(result["hostPid"])
         self.assertEqual(result["status"], "BLOCKED")
+
+    def test_monitor_reconnect_suite_never_launches_the_physical_pilot(self):
+        with patch.object(self.center, "command") as command:
+            result = self.center.run("windows-monitors-100", in_suite=True)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIsNone(result["hostPid"])
+        command.assert_not_called()
+
+    def test_monitor_reconnect_stop_keeps_a_bound_closure(self):
+        folder, session = self.center.session("6" * 32, test="windows-monitors-100")
+        session.update(pilotReceipt="isolated receipt", buildId="build", hostPid=42, sidecarPid=43)
+        app.pilot.write_json(folder / "session.json", session)
+        closure = {"session": session["id"], "status": "closed", "observedProcesses": 12, "remaining": []}
+        with patch.object(app.pilot, "stop_session", return_value=closure):
+            self.assertEqual(self.center.stop(session["id"]), closure)
+        receipt = app.pilot.read_json(folder / "monitors-100-closure.json")
+        self.assertEqual((receipt["buildId"], receipt["hostPid"], receipt["sidecarPid"]), ("build", 42, 43))
+        self.assertEqual(self.center.record(folder)["closure"], receipt)
 
     def test_resume_prepared_host_keeps_identity(self):
         identity = "4" * 32
@@ -337,6 +359,78 @@ class PerformanceSeriesTests(unittest.TestCase):
                 app.pilot.write_json(attempt / "result.json", {"checkpoint": {
                     "phase": "incident", "binding": self.plan["binding"], "outcome": "fail", "note": "fixture"}})
                 self.assertEqual(performance.verify(folder, self.plan)["status"], "FAIL")
+
+
+class MonitorReconnectTests(unittest.TestCase):
+    def setUp(self):
+        self.session = dict(testId=monitors.RECONNECT_TEST, id="4" * 32, buildId="build", gitSha="sha",
+                            hostPid=42, sidecarPid=43)
+        self.primary = dict(device="primary", dpi=96, primary=True, bounds=[0, 0, 1920, 1080], work=[0, 0, 1920, 1032])
+        self.secondary = dict(device="secondary", dpi=96, primary=False, bounds=[-1920, 0, 0, 1080],
+                              work=[-1920, 0, 0, 1032])
+        self.preflight = {"monitors": [self.primary, self.secondary]}
+        self.points = {}
+        pilot_start = datetime(2026, 11, 26, tzinfo=UTC)
+        for i, stage in enumerate(monitors.RECONNECT_PHASES):
+            on_secondary = stage in ("moved", "reconnected")
+            group_x = -1800 if stage != "baseline" else 24
+            live_x = group_x if on_secondary else 24
+            windows = [dict(name=name, monitor="primary", minimized=False, dpi=96, bounds=[400, 40, 700, 300])
+                       for name in sorted(monitors.SURFACES - {"Archivos"})]
+            windows.append(dict(name="Archivos", monitor="secondary" if on_secondary else "primary",
+                                minimized=False, dpi=96, bounds=[live_x, 24, live_x + 386, 296]))
+            groups = [dict(id=1, name="Archivos", monitor_key="secondary" if stage != "baseline" else "primary",
+                           x=group_x, y=24, width=386, height=272),
+                      dict(id=2, name="Juegos"), dict(id=3, name="Aplicaciones")]
+            data = dict(sqlite="ok", activeProfile="profile", profiles=[{"id": "profile", "name": "Default"}],
+                        groups=groups, references=[dict(item_id=j, sha256=str(j) if j < 4 else None, exists=True)
+                                                   for j in range(9)])
+            self.points[stage] = dict(session=self.session["id"], buildId="build", gitSha="sha", hostPid=42,
+                                      stage=stage, outcome="pass", note="fixture", hostActive=True, windows=windows,
+                                      library=data, observedUtc=(pilot_start + timedelta(minutes=i)).isoformat(),
+                                      monitors=[self.primary] if stage == "disconnected" else self.preflight["monitors"])
+        self.closure = dict(session=self.session["id"], buildId="build", hostPid=42, sidecarPid=43,
+                            status="closed", observedProcesses=12, remaining=[],
+                            closedUtc=(pilot_start + timedelta(minutes=4)).isoformat())
+
+    def verify(self, *, closed=True):
+        return monitors.verify_reconnect(self.session, self.preflight, self.points,
+                                         self.closure if closed else None, self.points["reconnected"]["library"])
+
+    def test_gate_accepts_only_extended_monitors_at_96_dpi(self):
+        self.assertTrue(monitors.two_at_100(self.preflight["monitors"]))
+        self.assertFalse(monitors.two_at_100([self.primary]))
+        self.assertFalse(monitors.two_at_100([self.primary, dict(self.secondary, dpi=120)]))
+        self.assertFalse(monitors.two_at_100([self.primary, dict(self.secondary, bounds=self.primary["bounds"])]))
+
+    def test_complete_evidence_requires_human_notes_and_bound_closure(self):
+        self.assertEqual(self.verify()["status"], "PASS")
+        self.assertEqual(self.verify(closed=False)["status"], "BLOCKED")
+        self.closure["hostPid"] = 12
+        self.assertEqual(self.verify()["status"], "BLOCKED")
+        self.closure["hostPid"] = 42
+        self.points["reconnected"]["note"] = ""
+        self.assertEqual(self.verify()["status"], "BLOCKED")
+
+    def test_requires_real_topology_change(self):
+        self.points["disconnected"]["monitors"] = self.preflight["monitors"]
+        self.assertEqual(self.verify()["status"], "BLOCKED")
+
+    def test_detects_offscreen_windows_and_lost_placement(self):
+        group = monitors.archivos(self.points["disconnected"])
+        group["bounds"][0] = -25
+        self.assertEqual(self.verify()["status"], "FAIL")
+        group["bounds"][0] = 24
+        monitors.saved_archivos(self.points["disconnected"]["library"])["x"] = 24
+        self.assertIn("persistida", self.verify()["reason"])
+
+    def test_detects_changed_file_hash_and_residual_process(self):
+        reference = self.points["reconnected"]["library"]["references"][0]
+        reference["sha256"] = "different"
+        self.assertEqual(self.verify()["status"], "FAIL")
+        reference["sha256"] = "0"
+        self.closure["remaining"] = [43]
+        self.assertEqual(self.verify()["status"], "FAIL")
 
 
 if __name__ == "__main__":

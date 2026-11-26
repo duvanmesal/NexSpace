@@ -14,7 +14,7 @@ param(
     [Parameter(Mandatory,ParameterSetName='Observe')]
     [Parameter(ParameterSetName='RunTest')]
     [Parameter(ParameterSetName='Report')][string]$Session,
-    [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('During','After','Keyboard','Narrator','Incident','Responsiveness')][string]$Phase,
+    [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('During','After','Keyboard','Narrator','Incident','Responsiveness','Baseline','Moved','Disconnected','Reconnected')][string]$Phase,
     [Parameter(Mandatory,ParameterSetName='Observe')][ValidateSet('Pass','Fail','Blocked')][string]$Outcome,
     [Parameter(Mandatory,ParameterSetName='Observe')][string]$Note,
     [Parameter(ParameterSetName='Report')][string]$Build,

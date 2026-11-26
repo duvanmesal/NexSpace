@@ -87,6 +87,42 @@ Usa `-Outcome Pass` cuando completes la fase descrita. Ante un defecto, usa `-Ou
 
 Tras registrar y verificar las fases, puedes dejar Narrador en su estado anterior y cerrar el piloto con `.\tools\NexSpace-Test.ps1 -Stop -Session $id`.
 
+## Dos monitores al 100 % y reconexión
+
+`windows-secondary` verifica la restauración inicial de una isla en la secundaria. `windows-offscreen` verifica el arranque con una pantalla guardada ausente. `windows-monitors-100` cubre el cambio de topología con NexSpace abierto. Requiere **dos pantallas extendidas a 96 DPI**. El preflight lee Windows sin cambiar escala, resolución ni disposición. [Áreas de trabajo por pantalla en Win32](https://learn.microsoft.com/en-us/windows/win32/gdi/multiple-monitor-system-metrics)
+
+```powershell
+# Solo inventario. No abre el piloto.
+python -X utf8 .\prototypes\web-shell\bench\Mixed-Dpi.py --monitors-100
+
+# Arranque explícito del operador desde la raíz del repositorio.
+$run = .\tools\NexSpace-Test.ps1 -Test windows-monitors-100 | ConvertFrom-Json
+$id = $run.id
+$run | Select-Object id, status, reason, buildId, hostPid, sidecarPid, evidenceDirectory
+```
+
+El arranque comprueba el build y repite el preflight. **BLOCKED** con un PID indica que está esperando las comprobaciones humanas. Si falta el PID, consulta `reason` antes de continuar. Usa el mismo ID durante todo el recorrido. Mantén el perfil de demostración, las tres islas expandidas y los menús cerrados al registrar cada punto. Usa los textos de ejemplo como guía y reemplázalos por lo que observes.
+
+1. **Baseline.** Localiza NexDock y las islas Archivos, Juegos y Aplicaciones. Comprueba que están accesibles y que Archivos parte de la pantalla principal. Registra el estado inicial.
+2. **Moved.** En **Archivos → ··· → Mover a otra pantalla**, traslada Archivos al secundario. Déjalo allí. El punto registra el nuevo dispositivo y las coordenadas de la ventana y de SQLite.
+3. **Disconnected.** Desconecta físicamente el cable de vídeo del secundario, dejando conectada la principal. Espera a que Windows retire la pantalla y a que NexSpace se estabilice. Comprueba que Archivos y las demás ventanas quedan accesibles en la pantalla restante. Registra el resultado antes de reconectar. Si Windows sigue detectando el monitor, registra `Blocked`.
+4. **Reconnected.** Reconecta al mismo puerto y espera a que Windows recupere la topología. Observa si Archivos vuelve a su posición guardada. Comprueba las cuatro ventanas y abre y cierra un popover de NexDock. Registra el resultado natural antes de invocar una recuperación manual. Si necesitas **Recuperar ventanas** desde la bandeja, conserva primero el fallo observado.
+
+```powershell
+# Ejecuta cada línea después de su paso físico, con tu propia observación.
+.\tools\NexSpace-Test.ps1 -Observe -Session $id -Phase Baseline -Outcome Pass -Note 'Describe las pantallas y ventanas iniciales'
+.\tools\NexSpace-Test.ps1 -Observe -Session $id -Phase Moved -Outcome Pass -Note 'Describe dónde quedó Archivos'
+.\tools\NexSpace-Test.ps1 -Observe -Session $id -Phase Disconnected -Outcome Pass -Note 'Describe la desconexión y la recuperación observada'
+.\tools\NexSpace-Test.ps1 -Observe -Session $id -Phase Reconnected -Outcome Pass -Note 'Describe el retorno de Archivos y el popover de NexDock'
+.\tools\NexSpace-Test.ps1 -Stop -Session $id
+.\tools\NexSpace-Test.ps1 -Verify -Session $id
+.\tools\NexSpace-Test.ps1 -Report -Session $id
+```
+
+Usa `-Outcome Fail` para un defecto observado y `Blocked` para una comprobación que no pudiste realizar. Confirma `checkpointRecorded: true` antes de pasar al siguiente paso. Cada punto guarda DPI, áreas útiles, HWND, rectángulos, perfil, colocaciones, referencias y hashes de archivos de prueba. Si necesitas repetir una toma, hazlo antes de pasar a la siguiente fase. Test Center conserva cada intento en `observe-*/`.
+
+`-Verify` exige cuatro observaciones ordenadas de la misma instancia, topología **2 → 2 → 1 → 2**, ventanas accesibles, coordenadas y referencias íntegras en SQLite y el recibo `monitors-100-closure.json` con `remaining: []`. La revalidación del ID usa la misma evidencia y no inicia un piloto. La prueba `windows-mixed-dpi` conserva su requisito de escalas distintas.
+
 ## DPI mixto y reconexión
 
 Primero comprueba las escalas efectivas. Este comando lee la topología de Windows con ventanas temporales invisibles, sin abrir NexSpace ni modificar la configuración de pantallas. Con una sola pantalla o con escalas iguales, el recorrido queda bloqueado. [GetDpiForWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getdpiforwindow)

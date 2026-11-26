@@ -348,6 +348,37 @@
         "Elige Recuperar ventanas y comprueba que NexDock reaparece.",
         "Ejecuta NexSpace-Test.ps1 -Verify -Session ID con el ID de este ensayo."]
     },
+    "windows-monitors-100": {
+      "name": "Dos monitores al 100 % y reconexión",
+      "description": "Comprueba el traslado, la recuperación y la reconexión física con dos monitores extendidos a 96 DPI.",
+      "component": "NexContainers y NexDock",
+      "category": "Windows",
+      "type": "guiada",
+      "platform": "Windows 11 x64",
+      "requirements": ["Dos pantallas extendidas a 96 DPI y un build Release vigente.", "Operador para desconectar y reconectar la pantalla secundaria."],
+      "preparation": ["python", "prototypes/web-shell/bench/Mixed-Dpi.py", "--monitors-100", "--output", "{monitors100Preflight}"],
+      "execution": [["python", "prototypes/web-shell/pilot_support.py", "run", "--id", "{session}"]],
+      "observation": ["python", "prototypes/web-shell/bench/Mixed-Dpi.py", "--monitors-100", "--session", "{session}", "--stage", "{phase}", "--operator", "{operator}"],
+      "verification": ["python", "prototypes/web-shell/bench/Mixed-Dpi.py", "--monitors-100", "--session", "{session}", "--verify", "{evidence}"],
+      "acceptanceCriteria": [
+        "Dos pantallas a 96 DPI, traslado de Archivos de principal a secundaria y posición comprobada en SQLite.",
+        "Desconexión, recuperación en el principal y retorno al secundario con NexDock operativo y cuatro ventanas accesibles.",
+        "Perfiles, referencias y archivos íntegros, con posición persistida y cierre ordinario sin procesos residuales."
+      ],
+      "timeoutSeconds": 90,
+      "humanRequired": true,
+      "evidence": "artifacts/test-center/sessions/{session}",
+      "availability": "READY",
+      "unavailableReason": null,
+      "nextAction": "Consulta el recorrido de monitores al 100 % en tools/test-center/README.md y verifica después del cierre.",
+      "requiresBuild": true,
+      "requiresIdleDesktop": true,
+      "managed": true,
+      "humanInstructions": ["Registra Baseline con cuatro ventanas visibles. Mueve Archivos a la secundaria y registra Moved.",
+        "Desconecta la pantalla secundaria y registra Disconnected tras observar la recuperación.",
+        "Reconecta por el mismo puerto y comprueba posiciones y un popover del dock. Ciérralo y registra Reconnected.",
+        "Cierra con -Stop -Session ID. Solo después ejecuta -Verify con ese ID."]
+    },
     "windows-mixed-dpi": {
       "name": "DPI mixto y reconexión",
       "description": "Mueve ventanas entre monitores con escalas distintas y verifica la recuperación al cambiar la topología.",
