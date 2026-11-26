@@ -519,10 +519,10 @@
       "type": "guiada",
       "platform": "Windows 11 x64",
       "requirements": ["Build Release vigente.", "Escritorio interactivo sin otro piloto abierto.", "Tres horas de reposo tras 15 minutos de calentamiento."],
-      "preparation": null,
+      "preparation": ["python", "prototypes/web-shell/bench/Performance-Hours.py", "preflight", "{session}", "{evidence}", "--preflight", "{preflight}"],
       "execution": [
         ["python", "prototypes/web-shell/pilot_support.py", "run", "--id", "{session}"],
-        ["python", "prototypes/web-shell/bench/Performance-Hours.py", "start", "{session}", "{evidence}", "--profile", "{performanceMode}"]
+        ["python", "prototypes/web-shell/bench/Performance-Hours.py", "start", "{session}", "{evidence}", "--profile", "{performanceMode}", "--preflight", "{preflight}"]
       ],
       "verification": ["python", "prototypes/web-shell/bench/Performance-Hours.py", "verify", "{session}", "{evidence}"],
       "observation": ["python", "prototypes/web-shell/bench/Performance-Hours.py", "observe", "{session}", "{evidence}", "--phase", "{phase}", "--operator", "{operator}"],
@@ -541,7 +541,8 @@
       "evidence": "artifacts/test-center/sessions/{session}",
       "availability": "READY",
       "unavailableReason": null,
-      "nextAction": "Consulta -Report con el ID de la sesión. El ensayo largo requiere -LongRun.",
+      "blockedExitCodes": [2],
+      "nextAction": "Consulta -Report con el ID de la sesión. Puedes usar -Prepare y después -LongRun -Session ID.",
       "requiresBuild": true,
       "requiresIdleDesktop": true,
       "managed": true

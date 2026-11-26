@@ -1,11 +1,17 @@
-param([Parameter(Mandatory)][int]$HostId,
-      [Parameter(Mandatory)][string]$HostStarted)
+[CmdletBinding(DefaultParameterSetName='Pilot')]
+param([Parameter(Mandatory,ParameterSetName='Pilot')][int]$HostId,
+      [Parameter(Mandatory,ParameterSetName='Pilot')][string]$HostStarted,
+      [Parameter(Mandatory,ParameterSetName='Preflight')][switch]$Preflight)
 
 $ErrorActionPreference = 'Stop'
 [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false)
 Add-Type -Path "$PSScriptRoot/Counters.cs"
 
 $processes = Get-CimInstance Win32_Process -Property Name,ProcessId,ParentProcessId,CreationDate
+if ($Preflight) {
+    $HostId = $PID
+    $HostStarted = ($processes | Where-Object ProcessId -EQ $PID).CreationDate.ToFileTimeUtc().ToString()
+}
 $owner = $processes | Where-Object ProcessId -EQ $HostId
 $alive = $owner -and $owner.CreationDate.ToFileTimeUtc().ToString() -ceq $HostStarted
 $rows = @()
@@ -52,6 +58,7 @@ if ($alive) {
 }
 [pscustomobject]@{
     utc = [DateTime]::UtcNow.ToString('o')
+    powerShellVersion = $PSVersionTable.PSVersion.ToString()
     hostAlive = [bool]$alive
     processCount = if ($alive) { $tree.Count } else { 0 }
     processes = $rows

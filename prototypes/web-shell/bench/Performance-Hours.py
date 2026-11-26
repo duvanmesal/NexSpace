@@ -16,6 +16,7 @@ PROFILES = {"long": (900, 10800, 60), "probe": (12, 36, 3)}
 METRICS = ("private", "ws", "handles", "gdi", "user", "cpuOneCorePct")
 CODES = {"PASS": 0, "FAIL": 1, "BLOCKED": 2, "ERROR": 3}
 WAITING = "Todavía faltan muestras del periodo de reposo."
+SNAPSHOT = Path(__file__).with_name("Resource-Snapshot.ps1")
 
 
 def now():
@@ -53,14 +54,45 @@ def load_plan(identity, folder):
     return plan
 
 
-def snapshot(plan):
-    bound = plan["binding"]
-    command = [pilot.powershell(), "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-               "-File", str(Path(__file__).with_name("Resource-Snapshot.ps1")),
-               "-HostId", str(bound["hostPid"]), "-HostStarted", bound["hostStarted"]]
-    result = subprocess.run(command, capture_output=True, encoding="utf-8", check=True,
+def read_snapshot(shell, *arguments):
+    command = [shell, "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+               "-File", str(SNAPSHOT), *arguments]
+    result = subprocess.run(command, capture_output=True, encoding="utf-8", errors="replace", check=True,
                             creationflags=subprocess.CREATE_NO_WINDOW, timeout=20)
     return json.loads(result.stdout)
+
+
+def snapshot(plan):
+    bound = plan["binding"]
+    engine = plan["collector"]
+    sample = read_snapshot(engine["powerShell"], "-HostId", str(bound["hostPid"]), "-HostStarted", bound["hostStarted"])
+    pilot.require(sample["powerShellVersion"] == engine["version"], "Cambió la versión de PowerShell del colector.")
+    return sample
+
+
+def collector_error(error):
+    output = error.stderr if isinstance(error, (subprocess.CalledProcessError, subprocess.TimeoutExpired)) else None
+    if isinstance(output, bytes):
+        output = output.decode("utf-8", errors="replace")
+    return output.strip() if output else str(error)
+
+
+def preflight(identity, path):
+    engine = dict(session=identity, checkedUtc=now())
+    try:
+        engine["powerShell"] = pilot.powershell()
+        sample = read_snapshot(engine["powerShell"], "-Preflight")
+        pilot.require(sample["hostAlive"] and sample["processes"]
+                      and sample["processCount"] == len(sample["processes"]), "El colector no pudo leer su propio árbol.")
+        totals(sample)
+        pilot.require(isinstance(sample["windows"], list), "El colector no devolvió la enumeración de ventanas.")
+        engine["version"] = sample["powerShellVersion"]
+        verdict = status("PASS", "El colector compiló y leyó sus contadores.")
+    except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
+        verdict = status("BLOCKED", "Falló el preflight del colector.", collectorError=collector_error(error))
+    record = {**engine, **verdict}
+    pilot.write_json(path, record)
+    return record
 
 
 def topology(sample):
@@ -172,8 +204,22 @@ def read_samples(folder):
         return [json.loads(line) for line in file if line.endswith("\n")]
 
 
-def start(identity, folder, profile):
-    plan = dict(profile=profile, timingSeconds=PROFILES[profile], binding=binding(identity, folder), createdUtc=now())
+def start(identity, folder, profile, preflight_path):
+    engine = pilot.read_json(preflight_path)
+    pilot.require(engine["session"] == identity and engine["status"] == "PASS",
+                  "Hace falta un preflight aprobado para esta sesión.")
+    plan = dict(profile=profile, timingSeconds=PROFILES[profile], binding=binding(identity, folder),
+                collector={key: engine[key] for key in ("powerShell", "version")}, preflight=str(preflight_path),
+                createdUtc=now())
+    try:
+        first = snapshot(plan)
+        if fault := sample_fault(first, plan, False):
+            raise RuntimeError(fault["reason"])
+    except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
+        verdict = status("BLOCKED", "El colector no pudo muestrear el piloto antes del calentamiento.",
+                         collectorError=collector_error(error), collector=plan["collector"])
+        print(json.dumps(verdict, ensure_ascii=False))
+        return CODES["BLOCKED"]
     with (folder / "performance-plan.json").open("x", encoding="utf-8") as file:
         json.dump(plan, file, ensure_ascii=False, indent=2)
     with (folder / "performance-worker.log").open("ab") as log:
@@ -212,9 +258,8 @@ def worker(identity, folder):
                 if verdict["reason"] != WAITING:
                     break
                 time.sleep(max(0, origin + len(samples) * interval - time.monotonic()))
-    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
-        detail = error.stderr if isinstance(error, subprocess.CalledProcessError) else str(error)
-        verdict = status("BLOCKED", "El colector se interrumpió.", collectorError=detail)
+    except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:
+        verdict = status("BLOCKED", "El colector se interrumpió.", collectorError=collector_error(error))
     pilot.write_json(folder / "performance-summary.json",
                      {**verdict, "binding": plan["binding"], "finishedUtc": now()})
     return 0
@@ -276,21 +321,25 @@ def verify(folder, plan):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("start", "worker", "observe", "verify"))
+    parser.add_argument("mode", choices=("preflight", "start", "worker", "observe", "verify"))
     parser.add_argument("session")
     parser.add_argument("evidence", type=Path)
     parser.add_argument("--profile", choices=PROFILES)
     parser.add_argument("--phase", choices=("responsiveness", "incident"))
     parser.add_argument("--operator", type=Path)
+    parser.add_argument("--preflight", type=Path)
     args = parser.parse_args()
     try:
         if args.mode == "start":
-            return start(args.session, args.evidence, args.profile)
+            return start(args.session, args.evidence, args.profile, args.preflight)
         if args.mode == "worker":
             return worker(args.session, args.evidence)
-        plan = load_plan(args.session, args.evidence)
-        verdict = (verify(args.evidence, plan) if args.mode == "verify" else
-                   observe(args.evidence, plan, args.phase, args.operator))
+        if args.mode == "preflight":
+            verdict = preflight(args.session, args.preflight)
+        else:
+            plan = load_plan(args.session, args.evidence)
+            verdict = (verify(args.evidence, plan) if args.mode == "verify" else
+                       observe(args.evidence, plan, args.phase, args.operator))
         print(json.dumps(verdict, ensure_ascii=False))
         return CODES[verdict["status"]]
     except (OSError, ValueError, KeyError, RuntimeError, subprocess.SubprocessError) as error:

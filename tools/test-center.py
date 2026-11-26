@@ -172,7 +172,7 @@ class Center:
         if test_id not in self.tests:
             raise ValueError(f"Prueba desconocida: {test_id}.")
         if performance_mode and test_id != "performance-hours":
-            raise ValueError("-LongRun y -Probe se aplican a performance-hours.")
+            raise ValueError("-LongRun, -Probe y -Prepare se aplican a performance-hours.")
         test = self.tests[test_id]
         identity = uuid.uuid4().hex
         folder, session = self.session(identity, test=test_id)
@@ -184,13 +184,14 @@ class Center:
         if test["humanRequired"] and in_suite:
             return result("BLOCKED", "La suite requiere una comprobación humana explícita.")
         if test_id == "performance-hours" and not performance_mode:
-            return result("BLOCKED", "Usa -LongRun para autorizar el ensayo prolongado o -Probe para comprobar el banco.")
+            return result("BLOCKED", "Usa -LongRun para iniciar, -Prepare para abrir un piloto o -Probe para comprobar el banco.")
         if not test["execution"]:
             return result("BLOCKED" if test["humanRequired"] else "NOT_TESTED", test["unavailableReason"])
         if test.get("requiresPwsh") and not shutil.which("pwsh.exe"):
             return result("BLOCKED", "Este banco requiere PowerShell 7.")
         values = {"{session}": identity, "{evidence}": folder, "{metadata}": folder / "adapter.json",
-                  "{python}": sys.executable, "{performanceMode}": performance_mode}
+                  "{python}": sys.executable, "{performanceMode}": performance_mode,
+                  "{preflight}": folder / "performance-preflight.json"}
         deadline = time.monotonic() + (timeout or test["timeoutSeconds"])
         try:
             if test.get("requiresBuild"):
@@ -217,9 +218,14 @@ class Center:
                 if test["preparation"]:
                     code, _, reason = self.command(test["preparation"], values, folder, "prepare", deadline)
                     if code:
+                        preflight = values["{preflight}"]
+                        if test_id == "performance-hours" and preflight.is_file():
+                            detail = pilot.read_json(preflight)
+                            return result("BLOCKED", detail["reason"], details=detail)
                         return result("BLOCKED", reason or "Falló la preparación.")
-                for index, tokens in enumerate(test["execution"], start=1):
-                    code, _, reason = self.command(tokens, values, folder, f"run-{index}", deadline)
+                commands = test["execution"][:1] if performance_mode == "prepare" else test["execution"]
+                for index, tokens in enumerate(commands, start=1):
+                    code, output, reason = self.command(tokens, values, folder, f"run-{index}", deadline)
                     adapter = values["{metadata}"]
                     if adapter.is_file():
                         metadata = pilot.read_json(adapter)
@@ -227,6 +233,9 @@ class Center:
                                         if key in (*METADATA, "hostPids", "sidecarPids", "nativeEvidence")})
                     if code:
                         status = "BLOCKED" if code in test.get("blockedExitCodes", []) else test.get("nonzeroStatus", "FAIL")
+                        if test_id == "performance-hours" and index == 2 and status == "BLOCKED":
+                            detail = pilot.read_json(output)
+                            return result(status, detail["reason"], details=detail)
                         return result(status, reason or f"El comando devolvió {code}.",
                                       details={"exitCode": code, "step": index})
                     if test.get("managed") and index == 1:
@@ -234,6 +243,9 @@ class Center:
                         pilot.write_json(folder / "session.json", session)
                 if test["humanRequired"]:
                     if test_id == "performance-hours":
+                        if performance_mode == "prepare":
+                            session["performancePrepared"] = True
+                            return result("BLOCKED", "Piloto preparado. Usa -LongRun -Session con este ID para iniciar el calentamiento.")
                         return result("BLOCKED", "El muestreo se inició. Consulta -Report para ver el avance.",
                                       details={"instructions": test["humanInstructions"], "profile": performance_mode})
                     if session["sourceFolder"]:
@@ -247,6 +259,35 @@ class Center:
             return result("PASS", "Los comandos del ensayo y sus comprobaciones terminaron correctamente.")
         except (RuntimeError, OSError, ValueError, KeyError, subprocess.SubprocessError) as error:
             return result("ERROR", str(error))
+
+    def start_prepared_performance(self, identity, timeout=None):
+        folder = self.folder(identity)
+        test = self.tests["performance-hours"]
+        with pilot.launch_gate(folder):
+            session = pilot.read_json(folder / "session.json")
+            pilot.require(session.get("performancePrepared") and not (folder / "performance-plan.json").exists(),
+                          "Indica una sesión preparada sin muestreo. Consulta -Report con su ID.")
+            data = self.managed(identity)
+            for key in ("buildId", "gitSha", "hostPid", "sidecarPid", "database"):
+                pilot.require(session[key] == data[key], f"La identidad de sesión cambió: {key}.")
+            attempt = folder / f"start-{uuid.uuid4().hex}"
+            attempt.mkdir()
+            preflight = attempt / "performance-preflight.json"
+            tokens = {"{session}": identity, "{evidence}": folder, "{performanceMode}": "long", "{preflight}": preflight}
+            deadline = time.monotonic() + (timeout or test["timeoutSeconds"])
+            code, _, reason = self.command(test["preparation"], tokens, attempt, "prepare", deadline)
+            if code:
+                detail = pilot.read_json(preflight) if preflight.is_file() else {"reason": reason}
+                return self.save(folder, session, "BLOCKED", detail["reason"], details=detail, action=test["nextAction"])
+            code, output, reason = self.command(test["execution"][1], tokens, attempt, "start", deadline)
+            if code:
+                detail = pilot.read_json(output)
+                return self.save(folder, session, "BLOCKED" if code == 2 else "ERROR", detail["reason"],
+                                 details=detail, action=test["nextAction"])
+            session["performancePrepared"] = False
+            return self.save(folder, session, "BLOCKED", "El muestreo se inició. Consulta -Report para ver el avance.",
+                             details={"instructions": test["humanInstructions"], "profile": "long"},
+                             action=test["nextAction"])
 
     def archive_evidence(self, folder, session):
         """Preserve small original receipts and trace files outside the temporary library."""
@@ -307,6 +348,8 @@ class Center:
             elif test_id == "windows-accessibility":
                 required += (folder / "uia-initial.json",)
             elif test_id == "performance-hours":
+                if not (folder / "performance-plan.json").is_file() and previous.get("status") == "BLOCKED":
+                    return previous
                 required += (folder / "performance-plan.json",)
             else:
                 required += (root / "evidence/tray.jsonl",)
@@ -429,7 +472,8 @@ class Center:
         session = pilot.read_json(descriptor)
         row = {**session, **(pilot.read_json(verdict) if verdict.is_file() else {})}
         if session["testId"] == "performance-hours":
-            for key, name in (("progress", "progress"), ("technicalEnd", "summary"), ("closure", "closure")):
+            for key, name in (("preflight", "preflight"), ("progress", "progress"),
+                              ("technicalEnd", "summary"), ("closure", "closure")):
                 path = folder / f"performance-{name}.json"
                 if path.is_file():
                     row[key] = pilot.read_json(path)
@@ -498,6 +542,9 @@ def markdown(rows):
             lines.append(f"- Muestreo · {progress['phase']} · {progress['samples']} muestras · "
                          f"{progress['measuredSeconds']:g}/{progress['targetSeconds']:g} s de reposo · "
                          f"última muestra {progress['lastUtc']}")
+        if preflight := row.get("preflight"):
+            lines.append(f"- Preflight del colector · {preflight['status']} · "
+                         f"{preflight.get('powerShell', 'sin intérprete')} {preflight.get('version', '')}")
         if end := row.get("technicalEnd"):
             lines.append(f"- Cierre técnico · {end['status']} · {end['reason']}")
             if summary := end.get("summary"):
@@ -549,9 +596,12 @@ def main():
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--long-run", dest="performance_mode", action="store_const", const="long")
     modes.add_argument("--probe", dest="performance_mode", action="store_const", const="probe")
+    modes.add_argument("--prepare", dest="performance_mode", action="store_const", const="prepare")
     args = parser.parse_args()
     if args.performance_mode and (args.mode != "run" or args.test != "performance-hours" or args.suite):
-        parser.error("--long-run y --probe requieren run --test performance-hours")
+        parser.error("--long-run, --probe y --prepare requieren run --test performance-hours")
+    if args.mode == "run" and args.session and args.performance_mode != "long":
+        parser.error("--session al iniciar requiere --test performance-hours --long-run")
     center = Center()
     if args.mode == "menu":
         return menu(center)
@@ -579,6 +629,8 @@ def main():
         raise ValueError("El plazo debe estar entre 1 y 14400 segundos.")
     if args.mode == "verify":
         result = center.verify(args.session, args.timeout)
+    elif args.session:
+        result = center.start_prepared_performance(args.session, args.timeout)
     elif args.test:
         result = center.run(args.test, args.timeout, performance_mode=args.performance_mode)
     else:

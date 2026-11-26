@@ -98,6 +98,56 @@ class TestCenterTests(unittest.TestCase):
         self.assertEqual(automatic["status"], "BLOCKED")
         command.assert_not_called()
 
+    def test_failed_preflight_never_launches_pilot(self):
+        def fail_preflight(command, values, folder, phase, deadline):
+            self.assertEqual(phase, "prepare")
+            app.pilot.write_json(values["{preflight}"], {"status": "BLOCKED", "reason": "Falló el preflight.",
+                                                          "collectorError": "Add-Type: invalid source"})
+            return 2, None, ""
+
+        with (
+            patch.object(app.pilot, "build_latest", return_value=(Path("build"), {
+                "id": "build", "commit": "abc", "dirty": False})),
+            patch.object(app.pilot, "processes", return_value=[]),
+            patch.object(self.center, "command", side_effect=fail_preflight) as command,
+        ):
+            result = self.center.run("performance-hours", performance_mode="long")
+        command.assert_called_once()
+        self.assertIsNone(result["hostPid"])
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertIn("Add-Type", result["details"]["collectorError"])
+        self.assertEqual(self.center.verify(result["id"])["reason"], result["reason"])
+
+    def test_prepare_launches_host_without_starting_warmup(self):
+        with (
+            patch.object(app.pilot, "build_latest", return_value=(Path("build"), {
+                "id": "build", "commit": "abc", "dirty": False})),
+            patch.object(app.pilot, "processes", return_value=[]),
+            patch.object(self.center, "command", return_value=(0, None, "")) as command,
+            patch.object(self.center, "managed", return_value={"hostPid": 42, "sidecarPid": 43}),
+        ):
+            result = self.center.run("performance-hours", performance_mode="prepare")
+        self.assertTrue(result["performancePrepared"])
+        self.assertEqual(result["hostPid"], 42)
+        self.assertEqual(result["status"], "BLOCKED")
+        self.assertEqual([call.args[3] for call in command.call_args_list], ["prepare", "run-1"])
+
+    def test_resume_prepared_host_keeps_identity(self):
+        identity = "4" * 32
+        folder, session = self.center.session(identity, test="performance-hours")
+        bound = dict(buildId="test", gitSha="test", hostPid=42, sidecarPid=43, database="isolated.db")
+        app.pilot.write_json(folder / "session.json", {**session, **bound, "performancePrepared": True})
+        with (
+            patch.object(self.center, "managed", return_value=bound),
+            patch.object(self.center, "command", return_value=(0, None, "")) as command,
+        ):
+            result = self.center.start_prepared_performance(identity)
+        self.assertFalse(result["performancePrepared"])
+        self.assertEqual(result["hostPid"], 42)
+        self.assertEqual([call.args[3] for call in command.call_args_list], ["prepare", "start"])
+        self.assertEqual(command.call_args.args[1]["{session}"], identity)
+        self.assertEqual(command.call_args.args[1]["{performanceMode}"], "long")
+
     def test_manual_start_keeps_one_id_and_opens_the_confirmed_source(self):
         with (
             patch.object(app.pilot, "build_latest", return_value=(Path("build"), {
@@ -189,6 +239,25 @@ class TestCenterTests(unittest.TestCase):
 
 
 class PerformanceSeriesTests(unittest.TestCase):
+    def test_legacy_compiler_preflight_and_diagnostics(self):
+        shell = app.pilot.powershell("powershell.exe")
+        with tempfile.TemporaryDirectory() as path, patch.object(performance.pilot, "powershell", return_value=shell):
+            folder = Path(path)
+            report = performance.preflight("fixture", folder / "valid.json")
+            self.assertEqual(report["status"], "PASS", report)
+            self.assertTrue(report["version"].startswith("5.1."))
+            source = folder / performance.SNAPSHOT.name
+            source.write_bytes(performance.SNAPSHOT.read_bytes())
+            (folder / "Counters.cs").write_text(
+                "public static class Counters { static void Read(out uint value) { value = 0; } "
+                "static void Invoke() { Read(out uint owner); } }", encoding="ascii")
+            with patch.object(performance, "SNAPSHOT", source):
+                report = performance.preflight("fixture", folder / "blocked.json")
+            self.assertEqual(report["status"], "BLOCKED")
+            self.assertIn("Add-Type", report["collectorError"])
+            self.assertIn("Counters.cs", report["collectorError"])
+            self.assertEqual(app.pilot.read_json(folder / "blocked.json"), report)
+
     def setUp(self):
         self.plan = dict(profile="long", binding={"hostPid": 42, "sidecarPid": 43},
                          timingSeconds=performance.PROFILES["long"])

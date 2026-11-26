@@ -14,7 +14,8 @@ public static class Counters {
     public static long[] VisibleWindows(int pid) {
         var windows = new List<long>();
         EnumWindows((window, unused) => {
-            GetWindowThreadProcessId(window, out uint owner);
+            uint owner;
+            GetWindowThreadProcessId(window, out owner);
             // Count named user-facing surfaces. Tao/WebView2 can also expose an untitled helper.
             if (owner == pid && IsWindowVisible(window) && GetWindowTextLength(window) > 0)
                 windows.Add(window.ToInt64());

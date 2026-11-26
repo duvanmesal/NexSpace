@@ -89,13 +89,21 @@ Tras registrar y verificar las fases, puedes dejar Narrador en su estado anterio
 
 ## Reposo prolongado
 
-Usa un build Release vigente y cierra otros pilotos. `-LongRun` autoriza el arranque. La sesión prepara su propia biblioteca SQLite y abre NexDock con tres islas. El banco toma muestras cada minuto durante **15 minutos de calentamiento y 3 horas de reposo**. La ventana de ejecución del comando está dedicada al arranque y la verificación. El colector continúa en segundo plano.
+Usa un build Release vigente y cierra otros pilotos. La sesión usa su propia biblioteca SQLite y abre NexDock con tres islas. El banco toma muestras cada minuto durante **15 minutos de calentamiento y 3 horas de reposo**. Antes de abrir el piloto, el preflight compila el código nativo del colector, lee contadores y registra el ejecutable y la versión de PowerShell en `performance-preflight.json`. El banco usa ese mismo ejecutable para comprobar el piloto antes de iniciar el calentamiento y para cada muestra en segundo plano. Si falla la compilación, el Test Center devuelve **BLOCKED** con el diagnóstico y el calentamiento queda pendiente.
 
 ```powershell
 $run = .\tools\NexSpace-Test.ps1 -Test performance-hours -LongRun | ConvertFrom-Json
 $id = $run.id
 $run | Select-Object id, buildId, gitSha, hostPid, sidecarPid, database, evidenceDirectory
 .\tools\NexSpace-Test.ps1 -Report -Session $id
+```
+
+Si quieres abrir el piloto antes de autorizar el calentamiento, usa `-Prepare`. El estado queda **BLOCKED**, con el host abierto y cero muestras. Cuando estés listo, inicia el ensayo con el mismo ID. El Test Center repite el preflight y comprueba la identidad del piloto preparado.
+
+```powershell
+$prepared = .\tools\NexSpace-Test.ps1 -Test performance-hours -Prepare | ConvertFrom-Json
+$id = $prepared.id
+.\tools\NexSpace-Test.ps1 -Test performance-hours -LongRun -Session $id
 ```
 
 1. Deja visibles NexDock y las tres islas. Mantén el escritorio en la misma sesión, sin suspender el equipo, cambiar pantallas, cambiar perfiles ni abrir popovers durante el muestreo. Si ocurre una incidencia, regístrala con su hora aproximada y el síntoma usando `-Phase Incident` y `-Outcome Fail` si falló el producto o `Blocked` si se interrumpió la observación.
