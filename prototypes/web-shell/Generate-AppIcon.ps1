@@ -1,6 +1,32 @@
 # Run with Windows PowerShell 5.1 and its built-in System.Drawing.
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Drawing
+Add-Type -ReferencedAssemblies System.Drawing -TypeDefinition @'
+using System;
+using System.Drawing;
+
+public static class IconOpticalBounds {
+    public static Rectangle Trim(Bitmap bitmap, int alphaFloor) {
+        int left = bitmap.Width, top = bitmap.Height, right = -1, bottom = -1;
+        for (int y = 0; y < bitmap.Height; y++) {
+            for (int x = 0; x < bitmap.Width; x++) {
+                int alpha = bitmap.GetPixel(x, y).A;
+                if (alpha == 0)
+                    continue;
+                if (alpha < alphaFloor) {
+                    bitmap.SetPixel(x, y, Color.Transparent);
+                    continue;
+                }
+                left = Math.Min(left, x);
+                top = Math.Min(top, y);
+                right = Math.Max(right, x);
+                bottom = Math.Max(bottom, y);
+            }
+        }
+        return right < 0 ? Rectangle.Empty : Rectangle.FromLTRB(left, top, right + 1, bottom + 1);
+    }
+}
+'@
 
 $source = Join-Path $PSScriptRoot '../../assets/icons/nexspace-jade-symbol.png'
 $destination = Join-Path $PSScriptRoot 'src-tauri/icons'
@@ -23,6 +49,12 @@ try {
     } finally {
         $inputGraphics.Dispose()
     }
+    # Trace alpha outside the symbol must not dictate its scale.
+    $content = [IconOpticalBounds]::Trim($premultiplied, 4)
+    if ($content.IsEmpty) { throw 'El icono no contiene una silueta visible.' }
+    $sample = $content
+    $sample.Inflate(2, 2) # Preserve the resampling margin around the silhouette.
+    $sample = [Drawing.Rectangle]::Intersect($sample, [Drawing.Rectangle]::new(0, 0, $image.Width, $image.Height))
     foreach ($size in $sizes) {
         $bitmap = [Drawing.Bitmap]::new($size, $size, $format)
         $graphics = [Drawing.Graphics]::FromImage($bitmap)
@@ -33,8 +65,16 @@ try {
             $graphics.InterpolationMode = [Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
             $graphics.PixelOffsetMode = [Drawing.Drawing2D.PixelOffsetMode]::HighQuality
             $options.SetWrapMode([Drawing.Drawing2D.WrapMode]::TileFlipXY)
-            $bounds = [Drawing.Rectangle]::new(0, 0, $size, $size)
-            $graphics.DrawImage($premultiplied, $bounds, 0, 0, $image.Width, $image.Height, [Drawing.GraphicsUnit]::Pixel, $options)
+            $scale = $size * 0.90 / [Math]::Max($content.Width, $content.Height)
+            $left = ($size - $content.Width * $scale) / 2 - ($content.Left - $sample.Left) * $scale
+            $top = ($size - $content.Height * $scale) / 2 - ($content.Top - $sample.Top) * $scale
+            $points = [Drawing.PointF[]]@(
+                [Drawing.PointF]::new($left, $top),
+                [Drawing.PointF]::new($left + $sample.Width * $scale, $top),
+                [Drawing.PointF]::new($left, $top + $sample.Height * $scale)
+            )
+            $sourceRect = [Drawing.RectangleF]::new($sample.X, $sample.Y, $sample.Width, $sample.Height)
+            $graphics.DrawImage($premultiplied, $points, $sourceRect, [Drawing.GraphicsUnit]::Pixel, $options)
             $last = $size - 1
             if ($bitmap.GetPixel(0, 0).A -or $bitmap.GetPixel(0, $last).A -or
                 $bitmap.GetPixel($last, 0).A -or $bitmap.GetPixel($last, $last).A) {

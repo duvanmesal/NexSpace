@@ -23,7 +23,7 @@ El fallo original de Cargo se reprodujo porque el binario existía en la instala
 
 ### Icono de Windows
 
-El [símbolo de jade transparente](../../assets/icons/nexspace-jade-symbol.png) es el original oficial y se conserva tal como llegó. El generador reduce el lienzo cuadrado completo con interpolación bicúbica y alfa premultiplicado. Los PNG RGBA y el ICO conservan el fondo transparente, las proporciones y los reflejos. Hay siete tamaños en `src-tauri/icons`, de 16, 24, 32, 48, 64, 128 y 256 px. La variante de 24 px está disponible en el ICO para escalas intermedias de Windows.
+El [símbolo de jade transparente](../../assets/icons/nexspace-jade-symbol.png) se conserva tal como llegó. En una copia de trabajo, el generador descarta el alfa residual de 1 a 3 sobre 255, mide el contorno restante y lo centra para ocupar el 90 % del lienzo por su lado mayor. La interpolación bicúbica con alfa premultiplicado aplica la misma escala a ambas dimensiones. Conserva el fondo transparente, las proporciones y los reflejos visibles. El ICO y los PNG RGBA de `src-tauri/icons` incluyen 16, 24, 32, 48, 64, 128 y 256 px. Windows 11 normalmente muestra 24 px en la barra de tareas y 16 px en la bandeja al 100 % de escala. [Tamaños de iconos de Windows](https://learn.microsoft.com/en-us/windows/apps/design/iconography/app-icon-construction)
 
 Tauri toma el ICO para el ejecutable y el icono predeterminado de las ventanas. La bandeja reutiliza ese icono. Windows lo usa para las superficies que muestran el icono de aplicación en la barra de tareas. La configuración de bundle apunta a los nuevos recursos. El piloto genera un EXE portátil y la creación de instaladores sigue desactivada. [Recursos de icono en Tauri](https://v2.tauri.app/develop/icons/)
 
