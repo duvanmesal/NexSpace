@@ -21,6 +21,21 @@ El fallo original de Cargo se reprodujo porque el binario existía en la instala
 - El orden es preflight, `npm ci`, TypeScript/Vite, Cargo con `--locked`, publicación .NET x64 autocontenida, comprobación PE, preparación SQLite y consulta IPC al sidecar publicado. Un fallo marca `build-status.json` como inválido. Los artefactos previos se conservan. El lanzador comprueba la revisión, la huella de entrada y los hashes de los archivos antes de abrir la última compilación verificada.
 - El resultado es reproducible desde el código y los lockfiles con las herramientas registradas. Cada compilación incorpora un ID nuevo. Eso cambia el hash del EXE aunque las entradas sean idénticas.
 
+### Icono de Windows
+
+El [original jade y hielo](../../assets/icons/nexspace-jade-ice.png) se conserva tal como llegó. Los derivados están en `src-tauri/icons`. El generador reduce la imagen cuadrada completa mediante interpolación bicúbica y guarda PNG de 16, 32, 48, 64, 128 y 256 px. El ICO contiene las seis imágenes. Se conserva el fondo oscuro y la iluminación del original.
+
+Tauri toma el ICO para el ejecutable y el icono predeterminado de las ventanas. La bandeja reutiliza ese icono. Windows lo usa para las superficies que muestran el icono de aplicación en la barra de tareas. La configuración de bundle apunta a los nuevos recursos. El piloto genera un EXE portátil y la creación de instaladores sigue desactivada. [Recursos de icono en Tauri](https://v2.tauri.app/develop/icons/)
+
+Desde la raíz del repositorio, regenera, compila y comprueba el recurso del EXE:
+
+```powershell
+powershell.exe -NoProfile -File .\prototypes\web-shell\Generate-AppIcon.ps1
+.\tools\NexSpace-Test.ps1 -Test build-release
+$build = python -X utf8 .\prototypes\web-shell\pilot_support.py latest
+python -X utf8 .\prototypes\web-shell\bench\Validate-AppIcon.py --exe (Join-Path $build 'nexspace-tauri-lab.exe')
+```
+
 ## Sesiones y cierre
 
 `Run-Pilot.ps1` crea una base aislada por arranque. `-DemoDatabase` copia una biblioteca de demostración desde una conexión SQLite de solo lectura. Por defecto el lanzador rechaza un segundo piloto si encuentra un proceso activo. `-AllowParallel` permite una decisión explícita y cada sesión recibe su propia base y su propio directorio WebView2. Para instancias antiguas que arrancaron fuera del lanzador, la procedencia de la biblioteca se informa como desconocida.

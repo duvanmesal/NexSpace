@@ -191,7 +191,8 @@ class Center:
             return result("BLOCKED", "Este banco requiere PowerShell 7.")
         values = {"{session}": identity, "{evidence}": folder, "{metadata}": folder / "adapter.json",
                   "{python}": sys.executable, "{performanceMode}": performance_mode,
-                  "{preflight}": folder / "performance-preflight.json"}
+                  "{preflight}": folder / "performance-preflight.json",
+                  "{mixedDpiPreflight}": folder / "mixed-dpi-preflight.json"}
         deadline = time.monotonic() + (timeout or test["timeoutSeconds"])
         try:
             if test.get("requiresBuild"):
@@ -218,6 +219,9 @@ class Center:
                 if test["preparation"]:
                     code, _, reason = self.command(test["preparation"], values, folder, "prepare", deadline)
                     if code:
+                        if test_id == "windows-mixed-dpi" and values["{mixedDpiPreflight}"].is_file():
+                            detail = pilot.read_json(values["{mixedDpiPreflight}"])
+                            return result("BLOCKED", detail["reason"], details=detail)
                         preflight = values["{preflight}"]
                         if test_id == "performance-hours" and preflight.is_file():
                             detail = pilot.read_json(preflight)
@@ -440,6 +444,8 @@ class Center:
         if session["testId"] == "performance-hours":
             pilot.write_json(folder / "performance-closure.json", {**closure, "closedUtc": now(),
                            "buildId": session["buildId"], "hostPid": session["hostPid"], "sidecarPid": session["sidecarPid"]})
+        elif session["testId"] == "windows-mixed-dpi":
+            pilot.write_json(folder / "mixed-dpi-closure.json", {**closure, "closedUtc": now(), "buildId": session["buildId"]})
         return closure
 
     def suite(self, suite_id, timeout=None):
@@ -477,6 +483,8 @@ class Center:
                 path = folder / f"performance-{name}.json"
                 if path.is_file():
                     row[key] = pilot.read_json(path)
+        elif session["testId"] == "windows-mixed-dpi":
+            row["checkpoints"] = sorted(path.name for path in folder.glob("mixed-dpi-*.json"))
         return row
 
     def accepted(self, identity):
@@ -553,6 +561,8 @@ def markdown(rows):
                              for metric, values in summary["metrics"].items())
         if closure := row.get("closure"):
             lines.append(f"- Salida del piloto · {closure['status']} · {closure['observedProcesses']} procesos observados")
+        for checkpoint in row.get("checkpoints", []):
+            lines.append(f"- Evidencia de DPI mixto · {checkpoint}")
     if not rows:
         lines.extend(["", "No hay sesiones para este filtro."])
     return "\n".join(lines) + "\n"

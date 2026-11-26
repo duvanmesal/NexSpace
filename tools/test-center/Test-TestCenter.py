@@ -132,6 +132,27 @@ class TestCenterTests(unittest.TestCase):
         self.assertEqual(result["status"], "BLOCKED")
         self.assertEqual([call.args[3] for call in command.call_args_list], ["prepare", "run-1"])
 
+    def test_mixed_dpi_blocks_before_launch_and_keeps_measurement(self):
+        measured = dict(readyForMixedDpi=False, monitors=[{"dpi": 96}, {"dpi": 96}],
+                        reason="Se requieren dos pantallas con escalas diferentes.")
+
+        def check_monitors(command, values, folder, phase, deadline):
+            self.assertEqual(phase, "prepare")
+            app.pilot.write_json(values["{mixedDpiPreflight}"], measured)
+            return 2, None, ""
+
+        with (
+            patch.object(app.pilot, "build_latest", return_value=(Path("build"), {
+                "id": "build", "commit": "abc", "dirty": False})),
+            patch.object(app.pilot, "processes", return_value=[]),
+            patch.object(self.center, "command", side_effect=check_monitors) as command,
+        ):
+            result = self.center.run("windows-mixed-dpi")
+        command.assert_called_once()
+        self.assertEqual(result["details"], measured)
+        self.assertIsNone(result["hostPid"])
+        self.assertEqual(result["status"], "BLOCKED")
+
     def test_resume_prepared_host_keeps_identity(self):
         identity = "4" * 32
         folder, session = self.center.session(identity, test="performance-hours")

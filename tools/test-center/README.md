@@ -87,6 +87,38 @@ Usa `-Outcome Pass` cuando completes la fase descrita. Ante un defecto, usa `-Ou
 
 Tras registrar y verificar las fases, puedes dejar Narrador en su estado anterior y cerrar el piloto con `.\tools\NexSpace-Test.ps1 -Stop -Session $id`.
 
+## DPI mixto y reconexión
+
+Primero comprueba las escalas efectivas. Este comando lee la topología de Windows con ventanas temporales invisibles, sin abrir NexSpace ni modificar la configuración de pantallas. Con una sola pantalla o con escalas iguales, el recorrido queda bloqueado. [GetDpiForWindow](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-getdpiforwindow)
+
+```powershell
+python -X utf8 .\prototypes\web-shell\bench\Mixed-Dpi.py
+```
+
+Cuando haya dos pantallas de escalas distintas ya configuradas, inicia el recorrido explícitamente desde el escritorio interactivo. Test Center repite la medición antes de lanzar el único piloto aislado. `BLOCKED` con PID y build indica que está abierto y espera tus comprobaciones.
+
+```powershell
+$run = .\tools\NexSpace-Test.ps1 -Test windows-mixed-dpi | ConvertFrom-Json
+$id = $run.id
+$run | Select-Object id, status, reason, buildId, hostPid, evidenceDirectory
+function Save-DpiCheckpoint($stage, $note) {
+    python -X utf8 .\prototypes\web-shell\bench\Mixed-Dpi.py --session $id --stage $stage --note $note
+}
+```
+
+1. **`baseline`.** Comprueba que NexDock y **Archivos**, **Juegos** y **Aplicaciones** están visibles y dentro de las áreas útiles. Anota si el texto, los iconos y el foco se distinguen. Ejecuta `Save-DpiCheckpoint baseline 'Describe el estado inicial'`.
+2. **`moved`.** Lleva **Archivos** a la pantalla de otra escala arrastrando el encabezado o desde **··· → Mover a otra pantalla**. Observa los tamaños, objetivos interactivos, texto, iconos y menú en la nueva escala. Registra `moved`. Comprueba que el dispositivo y las coordenadas guardadas de **Archivos** en `library.groups` corresponden a su nueva ventana.
+3. **`disconnected`.** Desconecta físicamente la pantalla secundaria sin cerrar NexSpace. Espera a que Windows actualice la topología y comprueba que el dock y las islas permanecen accesibles en la pantalla disponible. Registra la posición resultante y cualquier fallo con `disconnected`. Comprueba si SQLite conserva el dispositivo guardado para Archivos.
+4. **`reconnected`.** Reconecta la secundaria, espera a que Windows la detecte y registra el resultado natural como `reconnected`. Comprueba si Archivos vuelve a la posición guardada y el DPI corresponde nuevamente al monitor. Si falla, anótalo antes de usar la recuperación de bandeja.
+5. **`recovered`.** Si hace falta, usa **Recuperar ventanas** desde la bandeja. Verifica que todas las ventanas son accesibles y que se puede abrir un popover. Compara las referencias, la presencia de carpetas y los hashes de los archivos de prueba contra `baseline`. Verifica que `library.sqlite` sea `ok` y registra el estado final y cualquier recuperación manual.
+
+En cada punto, usa `Save-DpiCheckpoint` con el nombre indicado y describe lo observado. Los JSON quedan en la carpeta privada del mismo ID y contienen DPI, rectángulos, dispositivo, posición guardada, perfil y referencias. Cada nombre de punto se guarda una vez. `-Report` enumera las evidencias. Después del cierre ordinario, entrega el ID y tus observaciones para incorporar el resultado físico a la matriz. El recorrido guiado conserva **BLOCKED** y requiere esa aceptación manual.
+
+```powershell
+.\tools\NexSpace-Test.ps1 -Stop -Session $id
+.\tools\NexSpace-Test.ps1 -Report -Session $id
+```
+
 ## Reposo prolongado
 
 Usa un build Release vigente y cierra otros pilotos. La sesión usa su propia biblioteca SQLite y abre NexDock con tres islas. El banco toma muestras cada minuto durante **15 minutos de calentamiento y 3 horas de reposo**. Antes de abrir el piloto, el preflight compila el código nativo del colector, lee contadores y registra el ejecutable y la versión de PowerShell en `performance-preflight.json`. El banco usa ese mismo ejecutable para comprobar el piloto antes de iniciar el calentamiento y para cada muestra en segundo plano. Si falla la compilación, el Test Center devuelve **BLOCKED** con el diagnóstico y el calentamiento queda pendiente.
