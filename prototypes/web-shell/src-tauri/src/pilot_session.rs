@@ -10,7 +10,7 @@ pub struct PilotSession {
 
 impl PilotSession {
     pub fn tray_tracing() -> bool {
-        std::env::var_os("NEXSPACE_FLOATING_TRAY_TRACE").is_some()
+        !crate::beta::ENABLED && std::env::var_os("NEXSPACE_FLOATING_TRAY_TRACE").is_some()
     }
 
     pub fn open() -> io::Result<Option<Self>> {

@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
+    path::{Path, PathBuf},
     process::Stdio,
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,
@@ -45,12 +46,12 @@ struct Pipe {
     output: BufReader<ChildStdout>,
 }
 impl Pipe {
-    fn start(floating: bool) -> Result<Self, String> {
+    fn start(floating: bool, beta_data: Option<&Path>) -> Result<Self, String> {
         let base = std::env::current_exe().map_err(|_| "core-path")?;
         let dir = base.parent().ok_or("core-path")?;
-        let private_log = std::env::var_os("NEXSPACE_PILOT_SESSION_ID")
+        let private_log = beta_data.map(|root| root.join("logs/core.log")).or_else(|| std::env::var_os("NEXSPACE_PILOT_SESSION_ID")
             .and_then(|_| std::env::var_os("NEXSPACE_FLOATING_TEST_DIR"))
-            .map(|root| std::path::PathBuf::from(root).join("evidence/core.log"))
+            .map(|root| std::path::PathBuf::from(root).join("evidence/core.log")))
             .unwrap_or_else(|| dir.join("pilot-data/core.log"));
         let log = std::fs::OpenOptions::new()
             .create(true)
@@ -58,7 +59,10 @@ impl Pipe {
             .open(private_log)
             .map_err(|_| "core-unprepared")?;
         let mut cmd = Command::new(dir.join("core/NexSpace.CorePilot.exe"));
-        if floating {
+        if let Some(data) = beta_data {
+            cmd.arg("--floating-beta").arg(data).current_dir(dir)
+                .env_remove("NEXSPACE_PILOT_SESSION_ID").env_remove("NEXSPACE_FLOATING_TEST_DIR");
+        } else if floating {
             cmd.arg("--floating");
         }
         let mut child = cmd
@@ -105,6 +109,7 @@ impl Pipe {
 }
 pub struct Core {
     floating: bool,
+    beta_data: Option<PathBuf>,
     pipe: Mutex<Option<Pipe>>,
     next: AtomicU64,
     cancel: watch::Sender<u64>,
@@ -113,6 +118,7 @@ impl Default for Core {
     fn default() -> Self {
         Self {
             floating: false,
+            beta_data: None,
             pipe: Mutex::new(None),
             next: AtomicU64::new(1),
             cancel: watch::channel(0).0,
@@ -124,9 +130,10 @@ impl Core {
         self.exchange(serde_json::to_value(req).map_err(|_| "invalid-request")?)
             .await
     }
-    pub fn floating() -> Self {
+    pub fn floating(beta_data: Option<PathBuf>) -> Self {
         Self {
             floating: true,
+            beta_data,
             ..Self::default()
         }
     }
@@ -139,7 +146,7 @@ impl Core {
             return Err("cancelled".into());
         }
         if pipe.is_none() {
-            *pipe = Some(Pipe::start(self.floating)?);
+            *pipe = Some(Pipe::start(self.floating, self.beta_data.as_deref())?);
         }
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let exchange = pipe
@@ -197,6 +204,17 @@ impl Core {
     }
     pub fn cancel(&self) {
         self.cancel.send_modify(|v| *v = v.wrapping_add(1));
+    }
+
+    pub async fn shutdown(&self) {
+        self.cancel();
+        if let Some(Pipe { mut child, input, output }) = self.pipe.lock().await.take() {
+            drop(input);
+            drop(output);
+            if !matches!(timeout(Duration::from_secs(2), child.wait()).await, Ok(Ok(_))) {
+                let _ = child.kill().await;
+            }
+        }
     }
 }
 #[tauri::command]

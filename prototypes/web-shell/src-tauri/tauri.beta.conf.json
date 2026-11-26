@@ -1,0 +1,19 @@
+{
+  "productName": "NexSpace",
+  "version": "0.2.0-beta.1",
+  "identifier": "com.duvanmesal.nexspace",
+  "mainBinaryName": "NexSpace",
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "windows": {
+      "allowDowngrades": false,
+      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "nsis": {
+        "installMode": "currentUser",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      }
+    }
+  }
+}

@@ -8,8 +8,13 @@ public sealed class JsonEventLog : IEventLog
     private readonly string _path;
     private readonly object _gate = new();
 
-    public JsonEventLog()
+    public JsonEventLog(string? logDirectory = null)
     {
+        if (logDirectory is not null)
+        {
+            _path = Path.Combine(logDirectory, "events.jsonl");
+            return;
+        }
         var dataDirectory = Environment.GetEnvironmentVariable("NEXSPACE_DATA_DIR");
         if (string.IsNullOrWhiteSpace(dataDirectory)) dataDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NexSpace", "data");
         var fullDataDirectory = Path.GetFullPath(dataDirectory);

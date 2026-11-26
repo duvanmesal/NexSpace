@@ -17,12 +17,12 @@ internal sealed class FloatingLibrary
     readonly ShellIcons icons = new();
     static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow };
 
-    FloatingLibrary(string db)
+    FloatingLibrary(string db, string? logDirectory = null)
     {
         database = db;
         containers = new(new SqliteContainerRepository(db));
         Environment.SetEnvironmentVariable("NEXSPACE_DATA_DIR", Path.GetDirectoryName(db));
-        workspace = new(new SqliteWorkspaceRepository(db), containers, new JsonEventLog());
+        workspace = new(new SqliteWorkspaceRepository(db), containers, new JsonEventLog(logDirectory));
         profiles = new(new SqliteProfileRepository(db));
     }
 
@@ -59,9 +59,50 @@ internal sealed class FloatingLibrary
         finally { if (apartment >= 0) CoUninitialize(); }
     }
 
-    void Seed(string root)
+    public static void StartBeta(string root)
     {
-        var sources = Directory.CreateDirectory(Path.Combine(root, "recursos")).FullName;
+        root = Path.GetFullPath(root);
+        var db = Path.Combine(root, "floating.db");
+        var backups = Path.Combine(root, "backups");
+        var logs = Path.Combine(root, "logs");
+        Directory.CreateDirectory(root);
+        Directory.CreateDirectory(backups);
+        if (!File.Exists(db))
+        {
+            var pending = db + ".new-" + Guid.NewGuid().ToString("N");
+            var fresh = new FloatingLibrary(pending, logs);
+            _ = fresh.profiles.Load();
+            fresh.Seed(root, demoReferences: false);
+            File.Move(pending, db);
+        }
+        // Open through the repository before any profile query so migrations use the beta backup directory.
+        if (CheckBetaDatabase(db) != 3)
+        {
+            _ = new SqliteContainerRepository(db, backups).GetAll();
+            if (CheckBetaDatabase(db) != 3)
+                throw new InvalidDataException("Unexpected schema after migration.");
+        }
+        int apartment = CoInitializeEx(0, 2);
+        try { new FloatingLibrary(db, logs).Serve(); }
+        finally { if (apartment >= 0) CoUninitialize(); }
+    }
+
+    static long CheckBetaDatabase(string db)
+    {
+        using var existing = new SqliteConnection(new SqliteConnectionStringBuilder
+            { DataSource = db, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
+        existing.Open();
+        using var check = existing.CreateCommand();
+        check.CommandText = "PRAGMA quick_check(1)";
+        if (!Equals(check.ExecuteScalar(), "ok"))
+            throw new InvalidDataException("SQLite integrity check failed.");
+        check.CommandText = "PRAGMA user_version";
+        return (long)check.ExecuteScalar()!;
+    }
+
+    void Seed(string root, bool demoReferences = true)
+    {
+        var sources = demoReferences ? Directory.CreateDirectory(Path.Combine(root, "recursos")).FullName : root;
         var open = new List<Guid>();
         foreach (var (name, place, names, glyph) in new[]{
             ("Archivos",new ContainerPlacement("primary",24,24,386,272),new[]{"Proyectos","Brief.txt","Notas.txt"},"\uE8B7"),
@@ -70,7 +111,7 @@ internal sealed class FloatingLibrary
         {
             var group = Value(containers.Create(name, place));
             open.Add(group.Id);
-            foreach (var label in names)
+            foreach (var label in demoReferences ? names : Array.Empty<string>())
             {
                 string path = Path.Combine(sources, label);
                 if (Path.HasExtension(label)) { if (!File.Exists(path)) File.WriteAllText(path, "Recurso aislado de NexSpace."); }

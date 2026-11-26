@@ -3,11 +3,11 @@ name = "nexspace-tauri-lab"
 version = "0.1.0"
 edition = "2021"
 [build-dependencies]
-tauri-build = "2"
+tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon"] }
 serde_json = "1"
-tokio = { version = "1", features = ["process","io-util","macros","sync","time"] }
+tokio = { version = "1", features = ["process", "io-util", "macros", "sync", "time"] }
 serde = { version = "1", features = ["derive"] }
 open = "5"
 rfd = { version = "0.18", default-features = false }
@@ -15,6 +15,7 @@ global-hotkey = "0.10"
 [features]
 default = ["custom-protocol"]
 custom-protocol = ["tauri/custom-protocol"]
+windows-beta = []
 [profile.release]
 opt-level = 1
 debug = false

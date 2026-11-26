@@ -2,12 +2,14 @@
 param(
     [string]$DotNet, [string]$Cargo, [string]$Rustc, [string]$Node, [string]$Npm,
     [string]$Python, [string]$ToolchainRoot, [string]$GnuBin, [string]$DemoDatabase,
-    [switch]$CheckOnly
+    [switch]$CheckOnly, [switch]$Beta
 )
 $ErrorActionPreference='Stop'
 . "$PSScriptRoot/Pilot-Tools.ps1"
 $repo=(Resolve-Path "$PSScriptRoot/../..").Path
-$storage=Join-Path $repo 'artifacts/tauri-nexcore'
+if ($Beta -and $DemoDatabase) { throw 'La beta se genera sin bases de datos del laboratorio.' }
+$pilotStorage=Join-Path $repo 'artifacts/tauri-nexcore'
+$storage=if($Beta) {Join-Path $repo 'artifacts/beta/windows'} else {$pilotStorage}
 $statusFile=Join-Path $storage 'build-status.json'
 $previous=@{}
 $trackedEnv=@('PATH','CARGO_HOME','RUSTUP_HOME','RUSTC','DOTNET_ROOT','NEXSPACE_BUILD_ID','CARGO_TARGET_DIR','NEXSPACE_FLOATING_TEST_DIR','NEXSPACE_PILOT_SESSION_ID')
@@ -17,8 +19,8 @@ Push-Location $PSScriptRoot
 $buildLock=$null
 try {
     if(!$CheckOnly) {
-        New-Item -ItemType Directory -Force $storage | Out-Null
-        $buildLock=[IO.File]::Open((Join-Path $storage 'build.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
+        New-Item -ItemType Directory -Force $pilotStorage,$storage | Out-Null
+        $buildLock=[IO.File]::Open((Join-Path $pilotStorage 'build.lock'), 'OpenOrCreate', 'ReadWrite', 'None')
         Write-PilotJson $statusFile @{status='building';startedUtc=[DateTime]::UtcNow.ToString('o')}
     }
     if ($DemoDatabase) {
@@ -81,22 +83,30 @@ try {
     $source=(Invoke-PilotTool $Python @($helper,'source') | ConvertFrom-Json)
     $buildId="$($source.commit.Substring(0,8))-$([guid]::NewGuid().ToString('N'))"
     $out=Join-Path $storage "builds/$buildId"
-    New-Item -Type Directory -Force "$out/pilot-data" | Out-Null
+    New-Item -Type Directory -Force $out | Out-Null
     $env:NEXSPACE_BUILD_ID=$buildId
     $env:CARGO_TARGET_DIR=Join-Path $PSScriptRoot 'src-tauri/target'
     [Environment]::SetEnvironmentVariable('NEXSPACE_FLOATING_TEST_DIR',$null,'Process')
     [Environment]::SetEnvironmentVariable('NEXSPACE_PILOT_SESSION_ID',$null,'Process')
     Invoke-PilotTool $Npm @('ci','--no-audit')
     Invoke-PilotTool $Npm @('run','build')
-    Invoke-PilotTool $Cargo @('build','--release','--locked','--target',$target,'--manifest-path','src-tauri/Cargo.toml')
-    Invoke-PilotTool $DotNet @('publish','core/NexSpace.CorePilot.csproj','-c','Release','-r','win-x64','--self-contained','true','-o',"$out/core")
     $release=Join-Path $env:CARGO_TARGET_DIR "$target/release"
-    Copy-Item -LiteralPath "$release/nexspace-tauri-lab.exe","$release/WebView2Loader.dll" -Destination $out
     $metadata=@{
         id=$buildId;commit=$source.commit;sourceSha256=$source.sha256;dirty=$source.dirty
         startedUtc=$stamp;builtUtc=[DateTime]::UtcNow.ToString('o');architecture='x64';target=$target;versions=$versions
     }
     Write-PilotJson "$out/build-input.json" $metadata
+    if($Beta) {
+        . "$PSScriptRoot/Package-Beta.ps1"
+        New-WindowsBetaPackage $Npm $DotNet $target $release $out $metadata
+        Write-PilotJson $statusFile @{status='ready';id=$buildId;commit=$source.commit}
+        Write-Host "Beta Windows x64: $out"
+        return
+    }
+    New-Item -Type Directory -Force "$out/pilot-data" | Out-Null
+    Invoke-PilotTool $Cargo @('build','--release','--locked','--target',$target,'--manifest-path','src-tauri/Cargo.toml')
+    Invoke-PilotTool $DotNet @('publish','core/NexSpace.CorePilot.csproj','-c','Release','-r','win-x64','--self-contained','true','-o',"$out/core")
+    Copy-Item -LiteralPath "$release/nexspace-tauri-lab.exe","$release/WebView2Loader.dll" -Destination $out
     $prepare=@('--prepare-floating')
     if($DemoDatabase){$prepare+=$DemoDatabase}
     Invoke-PilotTool "$out/core/NexSpace.CorePilot.exe" $prepare

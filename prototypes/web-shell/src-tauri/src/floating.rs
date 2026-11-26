@@ -1,4 +1,5 @@
 use crate::{
+    beta::{self, BetaPaths},
     core::Core,
     err,
     pilot_session::PilotSession,
@@ -480,7 +481,7 @@ async fn add_paths(
     }
 }
 fn trace_drop(app: &AppHandle, stage: &str, detail: Value) {
-    if std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_some() {
+    if !beta::ENABLED && std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_some() {
         write_trace(app, "drop.jsonl", stage, detail);
     }
 }
@@ -878,6 +879,7 @@ async fn watch_displays(app: AppHandle) {
             .managed
             .as_ref()
             .is_some_and(PilotSession::stop_requested)
+            || app.try_state::<BetaPaths>().is_some_and(|paths| paths.stop_requested())
         {
             app.exit(0);
             return;
@@ -928,7 +930,6 @@ async fn watch_displays(app: AppHandle) {
 
 pub fn run() {
     tauri::Builder::default()
-        .manage(Core::floating())
         .invoke_handler(tauri::generate_handler![library, pick, frame, surface])
         .on_window_event(|win, event| {
             if matches!(event, WindowEvent::Destroyed) {
@@ -986,8 +987,22 @@ pub fn run() {
                 menu::{Menu, MenuItem},
                 tray::TrayIconBuilder,
             };
-            let managed = PilotSession::open()?;
-            let root = if let Some(session) = &managed {
+            let beta_data = if beta::ENABLED {
+                let Some(paths) = BetaPaths::open(app.handle())? else {
+                    app.handle().exit(0);
+                    return Ok(());
+                };
+                let data = paths.data.clone();
+                app.manage(paths);
+                Some(data)
+            } else {
+                None
+            };
+            app.manage(Core::floating(beta_data.clone()));
+            let managed = if beta::ENABLED { None } else { PilotSession::open()? };
+            let root = if let Some(data) = &beta_data {
+                data.join("logs")
+            } else if let Some(session) = &managed {
                 session.evidence.clone()
             } else {
                 std::env::temp_dir().join(format!(
@@ -1003,7 +1018,9 @@ pub fn run() {
                 a.starts_with("--floating-cycles=")
                     || matches!(a.as_str(), "--verify-floating-ipc" | "--floating-lifecycle")
             });
-            let webview_data = if diagnostic || managed.is_some() {
+            let webview_data = if let Some(data) = &beta_data {
+                data.join("webview")
+            } else if diagnostic || managed.is_some() {
                 root.join("webview")
             } else {
                 std::env::current_exe()?
@@ -1024,12 +1041,12 @@ pub fn run() {
             let quit = MenuItem::with_id(
                 app,
                 TRAY_QUIT,
-                "Cerrar NexSpace experimental",
+                if beta::ENABLED { "Cerrar NexSpace" } else { "Cerrar NexSpace experimental" },
                 true,
                 None::<&str>,
             )?;
             let menu = Menu::with_items(app, &[&restore, &quit])?;
-            let tooltip = if PilotSession::tray_tracing() || std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_some() {
+            let tooltip = if beta::ENABLED { "NexSpace" } else if PilotSession::tray_tracing() || std::env::var_os("NEXSPACE_FLOATING_DROP_TRACE").is_some() {
                 "NexSpace · ensayo de aceptación"
             } else {
                 "NexSpace experimental"
@@ -1084,7 +1101,7 @@ pub fn run() {
                     s.strip_prefix("--floating-cycles=")
                         .and_then(|v| v.parse::<u32>().ok())
                 })
-                .filter(|n| matches!(n, 100 | 300))
+                .filter(|n| !beta::ENABLED && matches!(n, 100 | 300))
             {
                 window(
                     app.handle(),
@@ -1121,7 +1138,7 @@ pub fn run() {
             }
             let a = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                if std::env::args().any(|s| s == "--verify-floating-ipc") {
+                if !beta::ENABLED && std::env::args().any(|s| s == "--verify-floating-ipc") {
                     let result = a.state::<Core>().verify_disconnect().await;
                     let _ = std::fs::write(
                         a.state::<Runtime>().root.join("ipc.result"),
@@ -1132,16 +1149,33 @@ pub fn run() {
                 }
                 let started = async {
                     ipc(&a, json!({"op":"startup"})).await?;
-                    sync(&a, false).await
+                    let manifest = sync(&a, false).await?;
+                    if let Some(paths) = a.try_state::<BetaPaths>().filter(|paths| paths.smoke) {
+                        let core = ipc(&a, json!({"op":"diagnostics"})).await?;
+                        paths.report(&json!({
+                            "hostPid":std::process::id(),"corePid":core["corePid"],"database":core["database"],
+                            "build":option_env!("NEXSPACE_BUILD_ID"),"profile":manifest["profile"],
+                            "windows":a.webview_windows().into_iter()
+                                .filter_map(|(name, window)| window.is_visible().ok().filter(|visible| *visible).map(|_| name))
+                                .collect::<Vec<_>>(),
+                            "groups":manifest["groups"]
+                        })).map_err(err)?;
+                    }
+                    Ok::<_, String>(manifest)
                 }.await;
                 if let Err(error) = started {
+                    if let Some(paths) = a.try_state::<BetaPaths>() {
+                        let _ = std::fs::write(paths.data.join("logs/startup-error.txt"), error);
+                        a.exit(1);
+                        return;
+                    }
                     if let Some(session) = &a.state::<Runtime>().managed {
                         let _ = std::fs::write(session.evidence.join("startup-error.txt"), error);
                         a.exit(1);
                         return;
                     }
                 }
-                if std::env::args().any(|s| s == "--floating-lifecycle") {
+                if !beta::ENABLED && std::env::args().any(|s| s == "--floating-lifecycle") {
                     let result = lifecycle(&a).await;
                     let _ = std::fs::write(
                         a.state::<Runtime>().root.join("lifecycle.result"),
@@ -1154,8 +1188,15 @@ pub fn run() {
             });
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("NexSpace floating host");
+        .build(tauri::generate_context!())
+        .expect("NexSpace floating host")
+        .run(|app, event| {
+            if beta::ENABLED && matches!(event, tauri::RunEvent::Exit) {
+                if let Some(core) = app.try_state::<Core>() {
+                    tauri::async_runtime::block_on(core.shutdown());
+                }
+            }
+        });
 }
 
 async fn cycles(app: &AppHandle, count: u32) -> Result<(), String> {

@@ -1,6 +1,7 @@
 #![windows_subsystem = "windows"]
 
 mod core;
+mod beta;
 mod floating;
 mod pilot_session;
 mod placement;
@@ -332,7 +333,7 @@ fn recover(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 fn main() {
-    if !std::env::args().any(|s| s == "--legacy") {
+    if cfg!(feature = "windows-beta") || !std::env::args().any(|s| s == "--legacy") {
         floating::run();
         return;
     }

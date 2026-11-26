@@ -5,7 +5,7 @@ using NexSpace.Domain;
 namespace NexSpace.Infrastructure;
 
 /// <summary>Persists container metadata and resource references; it never operates on referenced files.</summary>
-public sealed class SqliteContainerRepository(string databasePath) : IContainerRepository
+public sealed class SqliteContainerRepository(string databasePath, string? backupDirectory = null) : IContainerRepository
 {
     private readonly string _connectionString = new SqliteConnectionStringBuilder
     {
@@ -180,13 +180,13 @@ public sealed class SqliteContainerRepository(string databasePath) : IContainerR
         {
             connection.Open();
             using (var pragma = connection.CreateCommand()) { pragma.CommandText = "PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000"; pragma.ExecuteNonQuery(); }
-            EnsureSchema(connection);
+            EnsureSchema(connection, backupDirectory);
             return connection;
         }
         catch { connection.Dispose(); throw; }
     }
 
-    private static void EnsureSchema(SqliteConnection connection)
+    private static void EnsureSchema(SqliteConnection connection, string? backupDirectory)
     {
         using var version = connection.CreateCommand();
         version.CommandText = "PRAGMA user_version";
@@ -195,7 +195,10 @@ public sealed class SqliteContainerRepository(string databasePath) : IContainerR
         if (current == 3) return;
         if (current > 0)
         {
-            var backupPath = connection.DataSource + ".pre-v3-" + Guid.NewGuid().ToString("N") + ".bak";
+            var directory = backupDirectory ?? Path.GetDirectoryName(connection.DataSource)!;
+            Directory.CreateDirectory(directory);
+            var backupPath = Path.Combine(directory,
+                Path.GetFileName(connection.DataSource) + ".pre-v3-" + Guid.NewGuid().ToString("N") + ".bak");
             using var backup = new SqliteConnection(new SqliteConnectionStringBuilder { DataSource = backupPath, Pooling = false }.ToString());
             backup.Open(); connection.BackupDatabase(backup);
         }

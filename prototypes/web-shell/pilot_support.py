@@ -28,6 +28,7 @@ SOURCE = (
     "prototypes/web-shell/package-lock.json", "prototypes/web-shell/tsconfig.json",
     "prototypes/web-shell/vite.config.ts", "prototypes/web-shell/index.html",
     "prototypes/web-shell/Build-Pilot.ps1", "prototypes/web-shell/Pilot-Tools.ps1",
+    "prototypes/web-shell/Package-Beta.ps1",
     "prototypes/web-shell/pilot_support.py",
     "prototypes/web-shell/bench/Validate-AppIcon.py",
     "src/NexSpace.Application", "src/NexSpace.Domain", "src/NexSpace.Infrastructure",
