@@ -6,7 +6,7 @@ from ctypes import wintypes as w
 from pathlib import Path
 import struct
 
-SIZES = (16, 32, 48, 64, 128, 256)
+SIZES = (16, 24, 32, 48, 64, 128, 256)
 ICONS = Path(__file__).resolve().parents[1] / "src-tauri/icons"
 
 
@@ -30,7 +30,8 @@ def icon_files():
     for size in SIZES:
         image = (ICONS / f"{size}x{size}.png").read_bytes()
         require(image[:16] == b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" and
-                struct.unpack_from(">II", image, 16) == (size, size), f"PNG de {size} px inválido.")
+                struct.unpack_from(">II", image, 16) == (size, size) and image[24:26] == b"\x08\x06",
+                f"Se esperaba un PNG RGBA de {size} px.")
         images[size] = image
     ico = (ICONS / "icon.ico").read_bytes()
     entries = {size: ico[offset:offset + count] for size, count, offset in icon_directory(ico)}
@@ -110,5 +111,5 @@ if __name__ == "__main__":
     windows_decodes_icon()
     if args.exe:
         require(all(group == png for group in exe_icons(args.exe)), "El ejecutable incluye un grupo de iconos diferente.")
-    print("PNG e ICO de 16, 32, 48, 64, 128 y 256 px verificados." +
-          (" Los seis fotogramas coinciden con los recursos del ejecutable." if args.exe else ""))
+    print("PNG RGBA e ICO de 16, 24, 32, 48, 64, 128 y 256 px verificados." +
+          (" Los siete fotogramas coinciden con los recursos del ejecutable." if args.exe else ""))

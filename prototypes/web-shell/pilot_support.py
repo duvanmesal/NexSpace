@@ -29,6 +29,7 @@ SOURCE = (
     "prototypes/web-shell/vite.config.ts", "prototypes/web-shell/index.html",
     "prototypes/web-shell/Build-Pilot.ps1", "prototypes/web-shell/Pilot-Tools.ps1",
     "prototypes/web-shell/pilot_support.py",
+    "prototypes/web-shell/bench/Validate-AppIcon.py",
     "src/NexSpace.Application", "src/NexSpace.Domain", "src/NexSpace.Infrastructure",
     "src/NexSpace.Windows", "Directory.Build.props", "Directory.Build.targets",
     "Directory.Packages.props", "global.json", "NuGet.config",
@@ -125,12 +126,14 @@ def publish(build, storage):
         x64(build / name)
     require(data["id"].encode("ascii") in (build / HOST).read_bytes(), "El EXE carece del identificador de este build.")
     require((build / "core/NexSpace.CorePilot.dll").is_file(), "Falta el ensamblado de NexCore.")
+    subprocess.run([sys.executable, "-X", "utf8", REPO / "prototypes/web-shell/bench/Validate-AppIcon.py",
+                    "--exe", build / HOST], check=True, timeout=20)
     core_read(build, os.environ, "diagnostics")
     payload = [build / HOST, build / "WebView2Loader.dll", *(build / "core").rglob("*")]
     data["files"] = {p.relative_to(build).as_posix(): digest(p) for p in payload if p.is_file()}
     data["validations"] = dict(toolchain="PASS", typescript="PASS", vite="PASS",
                                cargoLocked="PASS", dotnetPublish="PASS", peX64="PASS",
-                               embeddedBuildId="PASS", sqliteCoreIpc="PASS")
+                               embeddedBuildId="PASS", windowsAppIcon="PASS", sqliteCoreIpc="PASS")
     write_json(build / "build.json", data)
     write_json(storage / "build-status.json", {"status": "verified", "id": data["id"]})
 

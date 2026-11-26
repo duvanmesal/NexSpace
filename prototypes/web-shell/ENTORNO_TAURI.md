@@ -23,9 +23,11 @@ El fallo original de Cargo se reprodujo porque el binario existía en la instala
 
 ### Icono de Windows
 
-El [original jade y hielo](../../assets/icons/nexspace-jade-ice.png) se conserva tal como llegó. Los derivados están en `src-tauri/icons`. El generador reduce la imagen cuadrada completa mediante interpolación bicúbica y guarda PNG de 16, 32, 48, 64, 128 y 256 px. El ICO contiene las seis imágenes. Se conserva el fondo oscuro y la iluminación del original.
+El [símbolo de jade transparente](../../assets/icons/nexspace-jade-symbol.png) es el original oficial y se conserva tal como llegó. El generador reduce el lienzo cuadrado completo con interpolación bicúbica y alfa premultiplicado. Los PNG RGBA y el ICO conservan el fondo transparente, las proporciones y los reflejos. Hay siete tamaños en `src-tauri/icons`, de 16, 24, 32, 48, 64, 128 y 256 px. La variante de 24 px está disponible en el ICO para escalas intermedias de Windows.
 
 Tauri toma el ICO para el ejecutable y el icono predeterminado de las ventanas. La bandeja reutiliza ese icono. Windows lo usa para las superficies que muestran el icono de aplicación en la barra de tareas. La configuración de bundle apunta a los nuevos recursos. El piloto genera un EXE portátil y la creación de instaladores sigue desactivada. [Recursos de icono en Tauri](https://v2.tauri.app/develop/icons/)
+
+Cargo vuelve a incrustar el icono cuando cambia el ICO. Antes de verificar el Release, el lanzador compara todos los fotogramas del ejecutable con los PNG. Para comprobarlo en Windows, abre el build vigente por `Run-Pilot.ps1` y revisa el botón del proceso en la barra de tareas y el icono de NexSpace experimental en la bandeja. Si solo un anclaje anterior muestra el símbolo viejo, comprueba primero qué ejecutable abre ese acceso.
 
 Desde la raíz del repositorio, regenera, compila y comprueba el recurso del EXE:
 
